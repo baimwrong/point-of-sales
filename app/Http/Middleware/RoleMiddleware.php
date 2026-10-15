@@ -27,6 +27,9 @@ class RoleMiddleware
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         if (!auth()->check()) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
             return redirect()->route('login');
         }
 
@@ -34,11 +37,18 @@ class RoleMiddleware
 
         if (!$user->is_active) {
             auth()->logout();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Your account has been deactivated.'], 403);
+            }
             return redirect()->route('login')
                 ->with('error', 'Your account has been deactivated.');
         }
 
-        if (!in_array($user->role->name, $roles)) {
+        $userRole = $user->role?->name;
+        if (!$userRole || !in_array($userRole, $roles)) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Unauthorized action.'], 403);
+            }
             abort(403, 'Unauthorized action.');
         }
 

@@ -53,7 +53,7 @@ class CategoryController extends Controller
         $category = Category::findOrFail($id);
         $data = $request->validate([
             'name'        => ['required', 'string', 'max:100'],
-            'parent_id'   => ['nullable', 'exists:categories,id'],
+            'parent_id'   => ['nullable', 'exists:categories,id', \Illuminate\Validation\Rule::notIn([$id])],
             'description' => ['nullable', 'string', 'max:500'],
             'sort_order'  => ['nullable', 'integer', 'min:0'],
             'is_active'   => ['boolean'],

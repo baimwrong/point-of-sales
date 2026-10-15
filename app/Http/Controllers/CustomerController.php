@@ -31,7 +31,7 @@ class CustomerController extends Controller
     public function show($id)
     {
         $customer = Customer::findOrFail($id);
-        $sales    = $customer->sales()->latest()->paginate(10);
+        $sales    = $customer->sales()->latest()->paginate(10)->withQueryString();
         $totalSpent = $customer->sales()->where('status', 'completed')->sum('total_amount');
         return view('customers.show', compact('customer', 'sales', 'totalSpent'));
     }

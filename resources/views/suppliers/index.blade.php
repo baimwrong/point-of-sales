@@ -82,7 +82,7 @@
                     <td>
                         @php $balance = $supplier->balance ?? 0; @endphp
                         <span class="{{ $balance < 0 ? 'text-danger' : 'text-success' }} fw-semibold">
-                            ${{ number_format(abs($balance), 2) }}
+                            Rp {{ number_format(abs($balance), 0, ',', '.') }}
                             @if($balance < 0) <i class="fas fa-arrow-down small"></i> @elseif($balance > 0) <i class="fas fa-arrow-up small"></i> @endif
                         </span>
                     </td>

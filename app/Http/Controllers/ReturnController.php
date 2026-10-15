@@ -66,7 +66,9 @@ class ReturnController extends Controller
                 $saleItem = $sale->saleItems->where('id', $retItem['sale_item_id'])->first();
                 if (!$saleItem) continue;
 
-                $alreadyReturned = SaleReturnItem::where('sale_item_id', $saleItem->id)->sum('quantity');
+                $alreadyReturned = SaleReturnItem::where('sale_item_id', $saleItem->id)
+                    ->whereHas('saleReturn', fn($q) => $q->whereNull('deleted_at'))
+                    ->sum('quantity');
                 $maxReturnable   = $saleItem->quantity - $alreadyReturned;
 
                 if ($maxReturnable <= 0) {
@@ -79,8 +81,11 @@ class ReturnController extends Controller
                 }
 
                 $hasReturnItems = true;
-                $unitPrice = $saleItem->unit_price;
-                $lineTotal = $unitPrice * $retQty;
+                // Calculate refund using effective unit price (respecting line item discount)
+                $effectiveUnitPrice = $saleItem->quantity > 0
+                    ? round($saleItem->total_price / $saleItem->quantity, 2)
+                    : $saleItem->unit_price;
+                $lineTotal = round($effectiveUnitPrice * $retQty, 2);
                 $totalRefund += $lineTotal;
 
                 SaleReturnItem::create([
@@ -89,7 +94,7 @@ class ReturnController extends Controller
                     'product_id'     => $saleItem->product_id,
                     'product_name'   => $saleItem->product_name,
                     'quantity'       => $retQty,
-                    'unit_price'     => $unitPrice,
+                    'unit_price'     => $effectiveUnitPrice,
                     'total_price'    => $lineTotal,
                 ]);
 
@@ -106,9 +111,23 @@ class ReturnController extends Controller
 
             $saleReturn->update(['total_refund' => $totalRefund]);
 
+            // Reverse customer loyalty points proportionally
+            if ($sale->customer_id) {
+                $loyaltyRate = (float) Setting::get('loyalty_rate', 1);
+                $pointsDeducted = floor($totalRefund / 1000) * $loyaltyRate;
+                if ($pointsDeducted > 0) {
+                    $customer = Customer::find($sale->customer_id);
+                    if ($customer && $customer->loyalty_points > 0) {
+                        $customer->decrement('loyalty_points', min($customer->loyalty_points, $pointsDeducted));
+                    }
+                }
+            }
+
             // Update sale status based on whether all items or some items are returned
             $totalSaleQty     = $sale->saleItems->sum('quantity');
-            $totalReturnedQty = SaleReturnItem::whereIn('sale_item_id', $sale->saleItems->pluck('id'))->sum('quantity');
+            $totalReturnedQty = SaleReturnItem::whereIn('sale_item_id', $sale->saleItems->pluck('id'))
+                ->whereHas('saleReturn', fn($q) => $q->whereNull('deleted_at'))
+                ->sum('quantity');
             $saleStatus       = ($totalReturnedQty >= $totalSaleQty) ? 'refunded' : 'partial_refund';
             $sale->update(['status' => $saleStatus]);
 
@@ -119,7 +138,9 @@ class ReturnController extends Controller
                 ->with('success', "Return {$returnNum} processed successfully. Refund: Rp " . number_format($totalRefund, 0, ',', '.'));
         } catch (\Throwable $e) {
             DB::rollBack();
-            return back()->with('error', 'Failed to process return: ' . $e->getMessage())->withInput();
+            report($e);
+            $msg = config('app.debug') ? $e->getMessage() : 'An error occurred while processing the return.';
+            return back()->with('error', 'Failed to process return: ' . $msg)->withInput();
         }
     }
 
@@ -131,10 +152,46 @@ class ReturnController extends Controller
 
     public function destroy($id)
     {
-        $return = SaleReturn::findOrFail($id);
-        $num = $return->return_number;
-        $return->delete();
-        ActivityLog::log('delete', "Deleted return: {$num}");
-        return redirect()->route('returns.index')->with('success', "Return {$num} deleted.");
+        try {
+            DB::beginTransaction();
+            $return = SaleReturn::with(['returnItems.product', 'sale.saleItems'])->findOrFail($id);
+            $num    = $return->return_number;
+            $sale   = $return->sale;
+
+            // Revert restored stock
+            foreach ($return->returnItems as $item) {
+                if ($item->product_id && $item->product?->track_stock) {
+                    $item->product->decrement('stock_quantity', min($item->product->stock_quantity, $item->quantity));
+                }
+            }
+
+            $return->delete();
+
+            // Recalculate parent sale status
+            if ($sale) {
+                $totalSaleQty = $sale->saleItems->sum('quantity');
+                $remainingReturnedQty = SaleReturnItem::whereIn('sale_item_id', $sale->saleItems->pluck('id'))
+                    ->whereHas('saleReturn', fn($q) => $q->whereNull('deleted_at'))
+                    ->sum('quantity');
+
+                if ($remainingReturnedQty == 0) {
+                    $sale->update(['status' => 'completed']);
+                } elseif ($remainingReturnedQty >= $totalSaleQty) {
+                    $sale->update(['status' => 'refunded']);
+                } else {
+                    $sale->update(['status' => 'partial_refund']);
+                }
+            }
+
+            ActivityLog::log('delete', "Deleted return: {$num}");
+            DB::commit();
+
+            return redirect()->route('returns.index')->with('success', "Return {$num} deleted.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+            $msg = config('app.debug') ? $e->getMessage() : 'An error occurred while deleting the return.';
+            return back()->with('error', 'Failed to delete return: ' . $msg);
+        }
     }
 }

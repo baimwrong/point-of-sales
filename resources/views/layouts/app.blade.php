@@ -386,8 +386,10 @@
             transition: var(--transition);
         }
 
-        .topbar-avatar:hover {
+        .topbar-avatar:hover,
+        .topbar-avatar:focus-visible {
             border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
         }
 
         /* User Dropdown */
@@ -808,9 +810,9 @@
 
             {{-- User Dropdown --}}
             <div class="dropdown">
-                <div class="topbar-avatar" data-bs-toggle="dropdown" aria-expanded="false" title="Account">
+                <button type="button" class="topbar-avatar" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User Account Menu" title="Account">
                     {{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 2)) }}
-                </div>
+                </button>
                 <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu">
                     <li>
                         <div class="user-dropdown-header">

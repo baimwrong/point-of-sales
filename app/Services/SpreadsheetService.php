@@ -23,6 +23,10 @@ class SpreadsheetService
             return self::parseXlsx($filePath);
         }
 
+        if ($ext === 'xls') {
+            throw new Exception("Legacy binary .xls files are not supported. Please save the file as modern .xlsx or .csv and try again.");
+        }
+
         // Default to CSV
         return self::parseCsv($filePath);
     }
@@ -94,7 +98,7 @@ class SpreadsheetService
         $sharedStrings = [];
         $stringsXml = $zip->getFromName('xl/sharedStrings.xml');
         if ($stringsXml !== false) {
-            $xml = simplexml_load_string($stringsXml);
+            $xml = simplexml_load_string($stringsXml, 'SimpleXMLElement', LIBXML_NONET);
             if ($xml) {
                 foreach ($xml->si as $si) {
                     if (isset($si->t)) {
@@ -119,7 +123,7 @@ class SpreadsheetService
             throw new Exception("No worksheet found in XLSX file.");
         }
 
-        $xml = simplexml_load_string($sheetXml);
+        $xml = simplexml_load_string($sheetXml, 'SimpleXMLElement', LIBXML_NONET);
         $zip->close();
 
         if (!$xml || !isset($xml->sheetData->row)) {

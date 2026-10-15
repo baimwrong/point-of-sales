@@ -102,4 +102,71 @@ class PosSecurityTest extends TestCase
 
         $response->assertStatus(422);
     }
+
+    public function test_order_discount_percentage_over_100_fails_validation(): void
+    {
+        $response = $this->actingAs($this->cashier)->postJson(route('pos.transaction'), [
+            'items' => [
+                [
+                    'id' => $this->product->id,
+                    'qty' => 1,
+                ],
+            ],
+            'payment_method' => 'cash',
+            'paid_amount' => 50000,
+            'discount_type' => 'percent',
+            'discount_value' => 105, // > 100%
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['discount_value']);
+    }
+
+    public function test_item_discount_percentage_over_100_fails_validation(): void
+    {
+        $response = $this->actingAs($this->cashier)->postJson(route('pos.transaction'), [
+            'items' => [
+                [
+                    'id' => $this->product->id,
+                    'qty' => 1,
+                    'discount_type' => 'percent',
+                    'discount_value' => 120, // > 100%
+                ],
+            ],
+            'payment_method' => 'cash',
+            'paid_amount' => 50000,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['items.0.discount_value']);
+    }
+
+    public function test_item_discount_overrides_catalog_discount_without_compounding(): void
+    {
+        // Set catalog discount to 10%
+        $this->product->update([
+            'discount_type' => 'percent',
+            'discount_value' => 10,
+        ]);
+
+        // Cashier overrides line discount with fixed 10,000 off
+        // Selling price = 50,000, so line total should be 40,000 (NOT compounded with 10%)
+        $response = $this->actingAs($this->cashier)->postJson(route('pos.transaction'), [
+            'items' => [
+                [
+                    'id' => $this->product->id,
+                    'qty' => 1,
+                    'discount_type' => 'fixed',
+                    'discount_value' => 10000,
+                ],
+            ],
+            'payment_method' => 'cash',
+            'paid_amount' => 50000,
+        ]);
+
+        $response->assertStatus(200);
+        $sale = Sale::first();
+        $this->assertNotNull($sale);
+        $this->assertEquals(40000, (float)$sale->subtotal);
+    }
 }

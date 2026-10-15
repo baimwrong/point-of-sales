@@ -52,12 +52,30 @@ class PosController extends Controller
             'items.*.qty'             => ['required', 'integer', 'min:1'],
             'items.*.price'           => ['nullable', 'numeric'],
             'items.*.discount_type'   => ['nullable', 'in:none,fixed,percent'],
-            'items.*.discount_value'  => ['nullable', 'numeric', 'min:0'],
+            'items.*.discount_value'  => [
+                'nullable', 'numeric', 'min:0',
+                function ($attribute, $value, $fail) use ($request) {
+                    $index = explode('.', $attribute)[1] ?? null;
+                    if ($index !== null) {
+                        $type = $request->input("items.{$index}.discount_type");
+                        if ($type === 'percent' && $value > 100) {
+                            $fail('Item discount percentage cannot exceed 100%.');
+                        }
+                    }
+                },
+            ],
             'payment_method'          => ['required', 'in:cash,card,transfer,qris,split'],
             'paid_amount'             => ['required', 'numeric', 'min:0'],
             'customer_id'             => ['nullable', 'exists:customers,id'],
             'discount_type'           => ['nullable', 'in:none,fixed,percent'],
-            'discount_value'          => ['nullable', 'numeric', 'min:0'],
+            'discount_value'          => [
+                'nullable', 'numeric', 'min:0',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->discount_type === 'percent' && $value > 100) {
+                        $fail('Order discount percentage cannot exceed 100%.');
+                    }
+                },
+            ],
             'notes'                   => ['nullable', 'string', 'max:500'],
             'split_payments'          => ['required_if:payment_method,split', 'array', 'min:1'],
             'split_payments.*.method' => ['required', 'in:cash,card,transfer,qris'],
@@ -95,16 +113,30 @@ class PosController extends Controller
                     ], 422);
                 }
 
-                $unitPrice    = (float) $product->effective_price;
-                $rawTotal     = $unitPrice * (int) $item['qty'];
-                $itemDiscType = $item['discount_type'] ?? 'none';
-                $itemDiscount = 0;
+                // Determine base price and discount without double-compounding
+                $unitPrice       = (float) $product->selling_price;
+                $rawTotal        = $unitPrice * (int) $item['qty'];
+                $catalogDiscType = $product->discount_type ?? 'none';
+                $catalogDiscVal  = (float) ($product->discount_value ?? 0);
+                $reqDiscType     = $item['discount_type'] ?? 'none';
+                $reqDiscVal      = (float) ($item['discount_value'] ?? 0);
 
-                // Apply item discount
-                if (!empty($itemDiscType) && $itemDiscType !== 'none') {
-                    $itemDiscount = $itemDiscType === 'percent'
-                        ? $rawTotal * ((float)($item['discount_value'] ?? 0) / 100)
-                        : (float)($item['discount_value'] ?? 0);
+                if (!empty($reqDiscType) && $reqDiscType !== 'none') {
+                    $itemDiscType = $reqDiscType;
+                    $itemDiscVal  = $reqDiscVal;
+                } elseif (!empty($catalogDiscType) && $catalogDiscType !== 'none') {
+                    $itemDiscType = $catalogDiscType;
+                    $itemDiscVal  = $catalogDiscVal;
+                } else {
+                    $itemDiscType = 'none';
+                    $itemDiscVal  = 0;
+                }
+
+                $itemDiscount = 0;
+                if ($itemDiscType === 'fixed') {
+                    $itemDiscount = min($rawTotal, $itemDiscVal * (int) $item['qty']);
+                } elseif ($itemDiscType === 'percent') {
+                    $itemDiscount = $rawTotal * (min(100, $itemDiscVal) / 100);
                 }
                 $lineTotal = max(0, $rawTotal - $itemDiscount);
                 $subtotal += $lineTotal;
@@ -119,14 +151,14 @@ class PosController extends Controller
                 ];
             }
 
-            // Order-level discount
+            // Order-level discount (capped at subtotal or 100%)
             $discType   = $request->discount_type ?? 'none';
             $discValue  = (float)($request->discount_value ?? 0);
             $discAmount = 0;
             if ($discType === 'fixed')   $discAmount = min($discValue, $subtotal);
-            if ($discType === 'percent') $discAmount = $subtotal * ($discValue / 100);
+            if ($discType === 'percent') $discAmount = min($subtotal, $subtotal * (min(100, $discValue) / 100));
 
-            $taxableAmount = $subtotal - $discAmount;
+            $taxableAmount = max(0, $subtotal - $discAmount);
             $taxAmount     = round($taxableAmount * ($taxRate / 100), 2);
             $totalAmount   = round($taxableAmount + $taxAmount, 2);
             $paidAmount    = (float)$request->paid_amount;
@@ -237,7 +269,8 @@ class PosController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
-            return response()->json(['success' => false, 'message' => 'Transaction failed: ' . $e->getMessage()], 500);
+            $msg = config('app.debug') ? $e->getMessage() : 'An error occurred while processing the transaction.';
+            return response()->json(['success' => false, 'message' => 'Transaction failed: ' . $msg], 500);
         }
     }
 

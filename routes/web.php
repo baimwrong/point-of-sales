@@ -163,8 +163,10 @@ Route::middleware(['auth'])->group(function () {
     // Returns
     Route::prefix('returns')->name('returns.')->group(function () {
         Route::get('/', [ReturnController::class, 'index'])->name('index');
-        Route::get('/create', [ReturnController::class, 'create'])->name('create');
-        Route::post('/', [ReturnController::class, 'store'])->name('store');
+        Route::get('/create', [ReturnController::class, 'create'])->name('create')
+            ->middleware('role:admin,manager');
+        Route::post('/', [ReturnController::class, 'store'])->name('store')
+            ->middleware('role:admin,manager');
         Route::get('/{id}', [ReturnController::class, 'show'])->name('show');
         Route::delete('/{id}', [ReturnController::class, 'destroy'])->name('destroy')
             ->middleware('role:admin');

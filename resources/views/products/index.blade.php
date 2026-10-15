@@ -155,8 +155,8 @@
                         <span class="text-muted small">—</span>
                         @endif
                     </td>
-                    <td class="text-muted">${{ number_format($product->cost_price ?? 0, 2) }}</td>
-                    <td class="fw-semibold">${{ number_format($product->selling_price ?? 0, 2) }}</td>
+                    <td class="text-muted">Rp {{ number_format($product->cost_price ?? 0, 0, ',', '.') }}</td>
+                    <td class="fw-semibold">Rp {{ number_format($product->selling_price ?? 0, 0, ',', '.') }}</td>
                     <td>
                         @php
                             $stock = $product->stock_quantity ?? 0;

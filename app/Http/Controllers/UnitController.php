@@ -9,7 +9,7 @@ class UnitController extends Controller
 {
     public function index()
     {
-        $units = Unit::withCount('products')->orderBy('name')->paginate(20);
+        $units = Unit::withCount('products')->orderBy('name')->paginate(20)->withQueryString();
         return view('units.index', compact('units'));
     }
 

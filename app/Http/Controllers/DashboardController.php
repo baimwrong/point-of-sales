@@ -14,10 +14,10 @@ class DashboardController extends Controller
     public function index()
     {
         // Today's stats
-        $todaySalesCount   = Sale::today()->count();
-        $todayRevenue      = Sale::today()->sum('total_amount');
-        $monthlyRevenue    = Sale::thisMonth()->sum('total_amount');
-        $monthlyCount      = Sale::thisMonth()->count();
+        $todaySalesCount   = Sale::completed()->today()->count();
+        $todayRevenue      = Sale::completed()->today()->sum('total_amount');
+        $monthlyRevenue    = Sale::completed()->thisMonth()->sum('total_amount');
+        $monthlyCount      = Sale::completed()->thisMonth()->count();
 
         // Inventory
         $totalProducts     = Product::active()->count();
@@ -40,13 +40,17 @@ class DashboardController extends Controller
             $chartData[]   = (float) ($dailySales[$date->toDateString()] ?? 0);
         }
 
-        // Top 5 selling products this month
+        // Top 5 selling products this month (SARGable range, excludes soft-deleted)
+        $monthStart = now()->startOfMonth()->startOfDay();
+        $monthEnd   = now()->endOfMonth()->endOfDay();
+
         $topProducts = DB::table('sale_items')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
-            ->whereMonth('sales.created_at', now()->month)
-            ->whereYear('sales.created_at', now()->year)
+            ->whereBetween('sales.created_at', [$monthStart, $monthEnd])
             ->where('sales.status', 'completed')
+            ->whereNull('sales.deleted_at')
+            ->whereNull('products.deleted_at')
             ->groupBy('sale_items.product_id', 'products.name', 'products.image')
             ->select(
                 'sale_items.product_id',
@@ -72,9 +76,9 @@ class DashboardController extends Controller
             ->limit(8)
             ->get();
 
-        // Total purchase this month
-        $monthlyPurchases = Purchase::whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
+        // Total purchase this month (excluding cancelled)
+        $monthlyPurchases = Purchase::whereBetween('created_at', [$monthStart, $monthEnd])
+            ->where('status', '!=', 'cancelled')
             ->sum('total_amount');
 
         return view('dashboard.index', compact(

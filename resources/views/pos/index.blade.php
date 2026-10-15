@@ -147,7 +147,7 @@
                         <span x-show="!customerId">Guest customer</span>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-outline-primary" @click="showCustomerModal = true" style="font-size:.75rem;padding:3px 10px">
+                <button class="btn btn-sm btn-outline-primary" @click="openCustomerModal()" style="font-size:.75rem;padding:3px 10px">
                     <i class="fas fa-search me-1"></i>Select
                 </button>
                 <button class="btn btn-sm btn-outline-secondary" @click="clearCustomer()" x-show="customerId" style="font-size:.75rem;padding:3px 8px">
@@ -256,13 +256,12 @@
                     <input type="number" class="form-control" x-model.number="amountTendered"
                            :min="total" step="1000" style="font-size:.9rem">
                 </div>
-                <div class="mt-2 d-flex gap-1 flex-wrap">
-                    <template x-for="denom in [5000,10000,20000,50000,100000]" :key="denom">
-                        <button class="btn btn-sm btn-outline-secondary" @click="amountTendered = Math.ceil(total / denom) * denom"
-                                style="font-size:.72rem;padding:3px 8px" x-text="'Rp ' + formatNum(Math.ceil(total / denom) * denom)">
+                    <template x-for="amt in quickCashOptions()" :key="amt">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="amountTendered = amt"
+                                style="font-size:.72rem;padding:3px 8px" x-text="'Rp ' + formatNum(amt)">
                         </button>
                     </template>
-                    <button class="btn btn-sm btn-outline-primary" @click="amountTendered = total" style="font-size:.72rem;padding:3px 8px">Exact</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" @click="amountTendered = total" style="font-size:.72rem;padding:3px 8px">Exact</button>
                 </div>
                 <div class="mt-2 p-2 rounded" style="background:#f0fdf4" x-show="changeAmount >= 0 && amountTendered > 0">
                     <div class="d-flex justify-content-between fw-semibold">
@@ -292,16 +291,16 @@
 </div>
 
 {{-- ========== Customer Modal ========== --}}
-<div class="modal fade" id="customerModal" tabindex="-1" x-show="showCustomerModal"
-     x-on:click.away="showCustomerModal = false" style="display:none">
+<div class="modal fade" id="customerModal" tabindex="-1" aria-labelledby="customerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
             <div class="modal-header py-2 px-3">
-                <h6 class="modal-title mb-0">Select Customer</h6>
-                <button type="button" class="btn-close btn-sm" @click="showCustomerModal = false"></button>
+                <h6 class="modal-title mb-0" id="customerModalLabel">Select Customer</h6>
+                <button type="button" class="btn-close btn-sm" @click="closeCustomerModal()" aria-label="Close"></button>
             </div>
             <div class="modal-body p-2">
                 <input type="text" class="form-control form-control-sm mb-2"
+                       id="customerSearchInput"
                        placeholder="Search name or phone..."
                        x-model="customerSearch"
                        @input.debounce.300ms="searchCustomers()"
@@ -349,7 +348,7 @@
                 </div>
             </div>
             <div class="modal-footer py-2 px-3 gap-2">
-                <a :href="lastReceipt ? '/pos/receipt/' + lastReceipt.sale_id : '#'"
+                <a :href="lastReceipt ? '{{ url('pos/receipt') }}/' + lastReceipt.sale_id : '#'"
                    target="_blank" class="btn btn-sm btn-outline-secondary">
                     <i class="fas fa-print me-1"></i>Print
                 </a>
@@ -384,7 +383,6 @@ function posTerminal() {
         notes: '',
         processing: false,
         taxRate: {{ $taxRate }},
-        showCustomerModal: false,
         customerSearch: '',
         customerResults: [],
         lastReceipt: null,
@@ -420,7 +418,7 @@ function posTerminal() {
 
         async loadProducts() {
             try {
-                const r = await fetch('/pos/search?q=');
+                const r = await fetch('{{ route("pos.search") }}?q=');
                 this.allProducts = await r.json();
                 this.filteredProducts = [...this.allProducts];
             } catch(e) { console.error('Failed to load products', e); }
@@ -526,10 +524,36 @@ function posTerminal() {
             if (method !== 'cash') this.amountTendered = this.total;
         },
 
+        quickCashOptions() {
+            const t = Math.ceil(this.total);
+            if (t <= 0) return [];
+            const options = new Set();
+            const denoms = [10000, 20000, 50000, 100000];
+            denoms.forEach(d => {
+                if (d >= t) options.add(d);
+                else {
+                    const nextRound = Math.ceil(t / d) * d;
+                    if (nextRound > t) options.add(nextRound);
+                }
+            });
+            options.add(Math.ceil(t / 50000) * 50000);
+            options.add(Math.ceil(t / 100000) * 100000);
+            return Array.from(options).filter(v => v >= t).sort((a,b) => a - b).slice(0, 4);
+        },
+
+        openCustomerModal() {
+            this.customerModal.show();
+            this.$nextTick(() => document.getElementById('customerSearchInput')?.focus());
+        },
+
+        closeCustomerModal() {
+            this.customerModal.hide();
+        },
+
         async searchCustomers() {
             if (this.customerSearch.length < 2) { this.customerResults = []; return; }
             try {
-                const r = await fetch('/customers/search?q=' + encodeURIComponent(this.customerSearch));
+                const r = await fetch('{{ route("customers.search") }}?q=' + encodeURIComponent(this.customerSearch));
                 this.customerResults = await r.json();
             } catch(e) {}
         },
@@ -538,9 +562,9 @@ function posTerminal() {
             this.customerId    = c.id;
             this.customerName  = c.name;
             this.loyaltyPoints = c.loyalty_points || 0;
-            this.showCustomerModal = false;
             this.customerSearch    = '';
             this.customerResults   = [];
+            this.customerModal.hide();
         },
 
         clearCustomer() {
@@ -568,7 +592,7 @@ function posTerminal() {
                     notes:          this.notes,
                 };
 
-                const r = await fetch('/pos/transaction', {
+                const r = await fetch('{{ route("pos.transaction") }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -587,7 +611,7 @@ function posTerminal() {
                     this.receiptModal.show();
                     await this.loadProducts(); // Refresh stock
                 } else {
-                    Swal.fire({ icon: 'error', title: 'Transaction Failed', text: data.message });
+                    Swal.fire({ icon: 'error', title: 'Transaction Failed', text: data.message || 'Transaction could not be completed.' });
                 }
             } catch(e) {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'An unexpected error occurred. Please try again.' });

@@ -43,7 +43,13 @@ class SaleController extends Controller
             if ($sale->status !== 'refunded') {
                 foreach ($sale->saleItems as $item) {
                     if ($item->product_id && $item->product?->track_stock) {
-                        Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+                        $alreadyReturned = \App\Models\SaleReturnItem::where('sale_item_id', $item->id)
+                            ->whereHas('saleReturn', fn($q) => $q->whereNull('deleted_at'))
+                            ->sum('quantity');
+                        $netRestorable = max(0, $item->quantity - $alreadyReturned);
+                        if ($netRestorable > 0) {
+                            Product::where('id', $item->product_id)->increment('stock_quantity', $netRestorable);
+                        }
                     }
                 }
             }

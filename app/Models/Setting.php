@@ -43,6 +43,14 @@ class Setting extends Model
 
     public static function clearCache(): void
     {
+        try {
+            $keys = static::pluck('key');
+            foreach ($keys as $k) {
+                Cache::forget("setting:{$k}");
+            }
+        } catch (\Throwable $e) {
+            // Ignore during setup/migrations
+        }
         foreach (array_keys(static::$cache) as $k) {
             Cache::forget("setting:{$k}");
         }

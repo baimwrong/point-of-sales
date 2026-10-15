@@ -96,7 +96,7 @@ class ProductImportController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'], // 10MB max
+            'file' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:10240'], // 10MB max
         ]);
 
         $file      = $request->file('file');
@@ -199,11 +199,14 @@ class ProductImportController extends Controller
                     }
                 }
 
-                // Check for existing product with same SKU
-                $existing = Product::where('sku', $sku)->first();
+                // Check for existing product with same SKU (including soft-deleted)
+                $existing = Product::withTrashed()->where('sku', $sku)->first();
 
                 if ($existing) {
                     if ($update) {
+                        if ($existing->trashed()) {
+                            $existing->restore();
+                        }
                         $existing->update([
                             'name'            => $name,
                             'barcode'         => $barcode,
@@ -215,10 +218,12 @@ class ProductImportController extends Controller
                             'stock_quantity'  => $stockQuantity,
                             'min_stock_alert' => $minStockAlert,
                             'description'     => $description ?: $existing->description,
+                            'is_active'       => true,
                         ]);
                         $updatedCount++;
                     } else {
-                        $errors[] = "Row {$rowNumber}: Skipped - SKU \"{$sku}\" already exists (enable 'Update existing' to overwrite).";
+                        $statusStr = $existing->trashed() ? 'archived' : 'already exists';
+                        $errors[] = "Row {$rowNumber}: Skipped - SKU \"{$sku}\" ({$statusStr}) (enable 'Update existing' to overwrite/restore).";
                     }
                 } else {
                     Product::create([
@@ -250,7 +255,9 @@ class ProductImportController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            return back()->with('error', 'Import failed due to database error: ' . $e->getMessage());
+            report($e);
+            $msg = config('app.debug') ? $e->getMessage() : 'An error occurred during database import.';
+            return back()->with('error', 'Import failed due to database error: ' . $msg);
         }
 
         $message = "Bulk Import Complete: {$importedCount} products added, {$updatedCount} updated.";
@@ -268,11 +275,9 @@ class ProductImportController extends Controller
      */
     public function export()
     {
-        $products = Product::with(['category', 'unit'])->latest()->get();
-
         $filename = 'products_catalog_' . now()->format('Ymd_His') . '.csv';
 
-        return response()->stream(function () use ($products) {
+        return response()->stream(function () {
             $handle = fopen('php://output', 'w');
             fputs($handle, "\xEF\xBB\xBF"); // UTF-8 BOM
             fputcsv($handle, [
@@ -290,7 +295,7 @@ class ProductImportController extends Controller
                 'description',
             ]);
 
-            foreach ($products as $p) {
+            foreach (Product::with(['category', 'unit'])->latest()->cursor() as $p) {
                 fputcsv($handle, [
                     PosHelper::sanitizeCsvValue($p->name),
                     PosHelper::sanitizeCsvValue($p->sku),

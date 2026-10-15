@@ -83,9 +83,9 @@ class PurchaseController extends Controller
 
             foreach ($itemsData as $item) {
                 $purchase->purchaseItems()->create($item);
-                // Update stock if directly received
+                // Update stock if directly received and stock is tracked
                 if ($request->status === 'received') {
-                    Product::where('id', $item['product_id'])->increment('stock_quantity', $item['quantity']);
+                    Product::where('id', $item['product_id'])->where('track_stock', true)->increment('stock_quantity', $item['quantity']);
                 }
             }
 
@@ -137,7 +137,7 @@ class PurchaseController extends Controller
             if ($newStatus === 'received' && $oldStatus !== 'received') {
                 foreach ($purchase->purchaseItems as $item) {
                     if ($item->product_id) {
-                        Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+                        Product::where('id', $item->product_id)->where('track_stock', true)->increment('stock_quantity', $item->quantity);
                     }
                 }
                 $purchase->received_at = now();
@@ -147,7 +147,7 @@ class PurchaseController extends Controller
             if ($oldStatus === 'received' && $newStatus !== 'received') {
                 foreach ($purchase->purchaseItems as $item) {
                     if ($item->product_id) {
-                        Product::where('id', $item->product_id)->decrement('stock_quantity', $item->quantity);
+                        Product::where('id', $item->product_id)->where('track_stock', true)->decrement('stock_quantity', $item->quantity);
                     }
                 }
                 $purchase->received_at = null;
@@ -170,7 +170,7 @@ class PurchaseController extends Controller
         DB::transaction(function () use ($purchase) {
             foreach ($purchase->purchaseItems as $item) {
                 if ($item->product_id) {
-                    Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+                    Product::where('id', $item->product_id)->where('track_stock', true)->increment('stock_quantity', $item->quantity);
                 }
             }
             $purchase->update(['status' => 'received', 'received_at' => now()]);
@@ -189,7 +189,7 @@ class PurchaseController extends Controller
             if ($purchase->status === 'received') {
                 foreach ($purchase->purchaseItems as $item) {
                     if ($item->product_id) {
-                        Product::where('id', $item->product_id)->decrement('stock_quantity', $item->quantity);
+                        Product::where('id', $item->product_id)->where('track_stock', true)->decrement('stock_quantity', $item->quantity);
                     }
                 }
             }
