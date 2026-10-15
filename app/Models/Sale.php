@@ -33,8 +33,8 @@ class Sale extends Model
     /* ------------------------------------------------------------------ */
     /* Relationships                                                        */
     /* ------------------------------------------------------------------ */
-    public function customer()    { return $this->belongsTo(Customer::class); }
-    public function user()        { return $this->belongsTo(User::class); }
+    public function customer()    { return $this->belongsTo(Customer::class)->withTrashed(); }
+    public function user()        { return $this->belongsTo(User::class)->withTrashed(); }
     public function saleItems()   { return $this->hasMany(SaleItem::class); }
     public function items()       { return $this->saleItems(); }
     public function salePayments(){ return $this->hasMany(SalePayment::class); }

@@ -21,8 +21,8 @@ class PurchaseController extends Controller
                 ->orWhereHas('supplier', fn($sq) => $sq->where('name', 'like', "%$s%")));
         }
         if ($st = $request->get('status')) $query->where('status', $st);
-        if ($from = $request->get('date_from')) $query->whereDate('created_at', '>=', $from);
-        if ($to   = $request->get('date_to'))   $query->whereDate('created_at', '<=', $to);
+        if ($from = $request->get('date_from')) $query->where('created_at', '>=', $from . ' 00:00:00');
+        if ($to   = $request->get('date_to'))   $query->where('created_at', '<=', $to . ' 23:59:59');
 
         $purchases = $query->paginate(15)->withQueryString();
         return view('purchases.index', compact('purchases'));
@@ -80,6 +80,11 @@ class PurchaseController extends Controller
                 'paid_amount'      => $request->paid_amount ?? 0,
                 'notes'            => $request->notes,
             ]);
+
+            $unpaid = $subtotal - ($request->paid_amount ?? 0);
+            if ($unpaid > 0 && $request->supplier_id && $request->status !== 'cancelled') {
+                Supplier::where('id', $request->supplier_id)->increment('balance', $unpaid);
+            }
 
             foreach ($itemsData as $item) {
                 $purchase->purchaseItems()->create($item);
@@ -153,6 +158,22 @@ class PurchaseController extends Controller
                 $purchase->received_at = null;
             }
 
+            // If cancelling a non-cancelled purchase, roll back unpaid balance owed to supplier
+            if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
+                $unpaid = $purchase->total_amount - $purchase->paid_amount;
+                if ($unpaid > 0 && $purchase->supplier_id) {
+                    Supplier::where('id', $purchase->supplier_id)->decrement('balance', $unpaid);
+                }
+            }
+
+            // If reactivating a cancelled purchase, restore unpaid balance owed to supplier
+            if ($oldStatus === 'cancelled' && $newStatus !== 'cancelled') {
+                $unpaid = $purchase->total_amount - $purchase->paid_amount;
+                if ($unpaid > 0 && $purchase->supplier_id) {
+                    Supplier::where('id', $purchase->supplier_id)->increment('balance', $unpaid);
+                }
+            }
+
             $purchase->update(['notes' => $request->notes, 'status' => $newStatus]);
         });
 
@@ -191,6 +212,12 @@ class PurchaseController extends Controller
                     if ($item->product_id) {
                         Product::where('id', $item->product_id)->where('track_stock', true)->decrement('stock_quantity', $item->quantity);
                     }
+                }
+            }
+            if ($purchase->status !== 'cancelled') {
+                $unpaid = $purchase->total_amount - $purchase->paid_amount;
+                if ($unpaid > 0 && $purchase->supplier_id) {
+                    Supplier::where('id', $purchase->supplier_id)->decrement('balance', $unpaid);
                 }
             }
             $purchase->delete();

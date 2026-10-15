@@ -36,7 +36,7 @@ class UserRequest extends FormRequest
                 'required',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email')->ignore($userId),
+                Rule::unique('users', 'email')->ignore($userId)->whereNull('deleted_at'),
             ],
             'role_id'  => ['required', 'exists:roles,id'],
             'phone'    => ['nullable', 'string', 'max:20'],

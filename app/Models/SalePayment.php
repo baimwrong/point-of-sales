@@ -13,5 +13,5 @@ class SalePayment extends Model
         return ['amount' => 'decimal:2'];
     }
 
-    public function sale() { return $this->belongsTo(Sale::class); }
+    public function sale() { return $this->belongsTo(Sale::class)->withTrashed(); }
 }

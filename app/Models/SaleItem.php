@@ -21,6 +21,6 @@ class SaleItem extends Model
         ];
     }
 
-    public function sale()    { return $this->belongsTo(Sale::class); }
-    public function product() { return $this->belongsTo(Product::class); }
+    public function sale()    { return $this->belongsTo(Sale::class)->withTrashed(); }
+    public function product() { return $this->belongsTo(Product::class)->withTrashed(); }
 }

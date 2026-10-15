@@ -175,7 +175,18 @@
                         <span class="text-muted">Payment Method</span>
                         <strong class="text-uppercase">{{ $sale->payment_method }}</strong>
                     </div>
-                    <div class="d-flex justify-content-between small mb-1">
+                    @if($sale->salePayments && $sale->salePayments->isNotEmpty())
+                        <div class="border-top pt-2 mt-2">
+                            <span class="text-muted small d-block mb-1">Tender Breakdown:</span>
+                            @foreach($sale->salePayments as $payment)
+                                <div class="d-flex justify-content-between small mb-1 ps-2">
+                                    <span class="text-capitalize text-muted">{{ $payment->payment_method }}{{ $payment->reference ? ' (' . $payment->reference . ')' : '' }}</span>
+                                    <span>Rp {{ number_format($payment->amount, 0, ',', '.') }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                    <div class="d-flex justify-content-between small mb-1 {{ $sale->salePayments && $sale->salePayments->isNotEmpty() ? 'border-top pt-2 mt-1' : '' }}">
                         <span class="text-muted">Paid Amount</span>
                         <strong>Rp {{ number_format($sale->paid_amount, 0, ',', '.') }}</strong>
                     </div>

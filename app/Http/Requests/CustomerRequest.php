@@ -30,17 +30,18 @@ class CustomerRequest extends FormRequest
         $customerId = $this->route('customer') ?? $this->route('id');
 
         return [
-            'name'    => ['required', 'string', 'max:255'],
-            'email'   => [
+            'name'      => ['required', 'string', 'max:255'],
+            'email'     => [
                 'nullable',
                 'email',
                 'max:255',
-                Rule::unique('customers', 'email')->ignore($customerId),
+                Rule::unique('customers', 'email')->ignore($customerId)->whereNull('deleted_at'),
             ],
-            'phone'   => ['nullable', 'string', 'max:20'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'city'    => ['nullable', 'string', 'max:100'],
-            'notes'   => ['nullable', 'string'],
+            'phone'     => ['nullable', 'string', 'max:20'],
+            'address'   => ['nullable', 'string', 'max:500'],
+            'city'      => ['nullable', 'string', 'max:100'],
+            'notes'     => ['nullable', 'string'],
+            'is_active' => ['nullable', 'boolean'],
         ];
     }
 

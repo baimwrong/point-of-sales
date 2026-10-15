@@ -57,11 +57,11 @@ class Category extends Model
     // -----------------------------------------------------------------------
 
     /**
-     * Use slug as the route model binding key.
+     * Use id as the route model binding key.
      */
     public function getRouteKeyName(): string
     {
-        return 'slug';
+        return 'id';
     }
 
     // -----------------------------------------------------------------------

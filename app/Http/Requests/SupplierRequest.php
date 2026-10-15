@@ -35,13 +35,16 @@ class SupplierRequest extends FormRequest
                 'nullable',
                 'email',
                 'max:255',
-                Rule::unique('suppliers', 'email')->ignore($supplierId),
+                Rule::unique('suppliers', 'email')->ignore($supplierId)->whereNull('deleted_at'),
             ],
             'phone'      => ['nullable', 'string', 'max:20'],
             'address'    => ['nullable', 'string', 'max:500'],
+            'city'       => ['nullable', 'string', 'max:100'],
+            'country'    => ['nullable', 'string', 'max:100'],
             'company'    => ['nullable', 'string', 'max:255'],
             'tax_number' => ['nullable', 'string', 'max:50'],
             'notes'      => ['nullable', 'string'],
+            'is_active'  => ['nullable', 'boolean'],
         ];
     }
 

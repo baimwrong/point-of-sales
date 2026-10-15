@@ -20,7 +20,7 @@ class SaleReturnItem extends Model
         ];
     }
 
-    public function saleReturn() { return $this->belongsTo(SaleReturn::class, 'sale_return_id'); }
+    public function saleReturn() { return $this->belongsTo(SaleReturn::class, 'sale_return_id')->withTrashed(); }
     public function saleItem()   { return $this->belongsTo(SaleItem::class); }
-    public function product()    { return $this->belongsTo(Product::class); }
+    public function product()    { return $this->belongsTo(Product::class)->withTrashed(); }
 }

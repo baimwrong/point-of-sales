@@ -66,8 +66,10 @@ class ReportController extends Controller
             ->join('sales',    'sales.id',    '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
             ->where('sales.status', 'completed')
-            ->whereDate('sales.created_at', '>=', $from)
-            ->whereDate('sales.created_at', '<=', $to)
+            ->whereNull('sales.deleted_at')
+            ->whereNull('products.deleted_at')
+            ->where('sales.created_at', '>=', $from . ' 00:00:00')
+            ->where('sales.created_at', '<=', $to . ' 23:59:59')
             ->groupBy('sale_items.product_id', 'products.name', 'products.sku', 'products.selling_price', 'products.cost_price')
             ->select(
                 'sale_items.product_id',

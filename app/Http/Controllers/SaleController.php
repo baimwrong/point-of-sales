@@ -19,8 +19,8 @@ class SaleController extends Controller
             $query->where(fn($q) => $q->where('invoice_number', 'like', "%$s%")
                 ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%$s%")));
         }
-        if ($from = $request->get('date_from')) $query->whereDate('created_at', '>=', $from);
-        if ($to   = $request->get('date_to'))   $query->whereDate('created_at', '<=', $to);
+        if ($from = $request->get('date_from')) $query->where('created_at', '>=', $from . ' 00:00:00');
+        if ($to   = $request->get('date_to'))   $query->where('created_at', '<=', $to . ' 23:59:59');
         if ($pm   = $request->get('payment_method')) $query->where('payment_method', $pm);
         if ($st   = $request->get('status')) $query->where('status', $st);
 
@@ -63,8 +63,8 @@ class SaleController extends Controller
     public function export(Request $request)
     {
         $query = Sale::with(['customer', 'user'])
-            ->when($request->date_from, fn($q, $v) => $q->whereDate('created_at', '>=', $v))
-            ->when($request->date_to,   fn($q, $v) => $q->whereDate('created_at', '<=', $v))
+            ->when($request->date_from, fn($q, $v) => $q->where('created_at', '>=', $v . ' 00:00:00'))
+            ->when($request->date_to,   fn($q, $v) => $q->where('created_at', '<=', $v . ' 23:59:59'))
             ->when($request->payment_method, fn($q, $v) => $q->where('payment_method', $v))
             ->latest();
 

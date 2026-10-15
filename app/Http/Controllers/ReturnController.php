@@ -34,19 +34,25 @@ class ReturnController extends Controller
 
     public function store(Request $request)
     {
+        // Filter out items with 0 or negative return quantity so partial returns validate cleanly
+        $items = array_values(array_filter($request->input('items', []), fn($i) => isset($i['quantity']) && (int)$i['quantity'] > 0));
+        $request->merge(['items' => $items]);
+
         $request->validate([
-            'sale_id'       => ['required', 'exists:sales,id'],
-            'reason'        => ['nullable', 'string', 'max:500'],
-            'refund_method' => ['required', 'in:cash,store_credit'],
-            'items'         => ['required', 'array', 'min:1'],
+            'sale_id'              => ['required', 'exists:sales,id'],
+            'reason'               => ['nullable', 'string', 'max:500'],
+            'refund_method'        => ['required', 'in:cash,store_credit'],
+            'items'                => ['required', 'array', 'min:1'],
             'items.*.sale_item_id' => ['required', 'exists:sale_items,id'],
             'items.*.quantity'     => ['required', 'integer', 'min:1'],
+        ], [
+            'items.min' => 'Please specify a return quantity of at least 1 for at least one item.',
         ]);
 
         try {
             DB::beginTransaction();
 
-            $sale       = Sale::with('saleItems.product')->findOrFail($request->sale_id);
+            $sale       = Sale::with('saleItems.product')->lockForUpdate()->findOrFail($request->sale_id);
             $returnNum  = PosHelper::generateReturnNumber();
             $totalRefund = 0;
 
@@ -83,9 +89,16 @@ class ReturnController extends Controller
                 $hasReturnItems = true;
                 // Calculate refund using effective unit price (respecting line item discount)
                 $effectiveUnitPrice = $saleItem->quantity > 0
-                    ? round($saleItem->total_price / $saleItem->quantity, 2)
-                    : $saleItem->unit_price;
-                $lineTotal = round($effectiveUnitPrice * $retQty, 2);
+                    ? ($saleItem->total_price / $saleItem->quantity)
+                    : (float)$saleItem->unit_price;
+
+                // Proportionately factor in order-level discount and tax
+                $orderDiscountRatio = $sale->subtotal > 0 ? ((float)$sale->discount_amount / (float)$sale->subtotal) : 0;
+                $netUnitRefund      = $effectiveUnitPrice * (1 - $orderDiscountRatio);
+                $unitTaxRefund      = $sale->tax_rate > 0 ? ($netUnitRefund * ((float)$sale->tax_rate / 100)) : 0;
+                $finalUnitRefund    = round($netUnitRefund + $unitTaxRefund, 2);
+
+                $lineTotal = round($finalUnitRefund * $retQty, 2);
                 $totalRefund += $lineTotal;
 
                 SaleReturnItem::create([
@@ -94,13 +107,16 @@ class ReturnController extends Controller
                     'product_id'     => $saleItem->product_id,
                     'product_name'   => $saleItem->product_name,
                     'quantity'       => $retQty,
-                    'unit_price'     => $effectiveUnitPrice,
+                    'unit_price'     => $finalUnitRefund,
                     'total_price'    => $lineTotal,
                 ]);
 
                 // Restore stock
-                if ($saleItem->product_id && $saleItem->product?->track_stock) {
-                    Product::where('id', $saleItem->product_id)->increment('stock_quantity', $retQty);
+                if ($saleItem->product_id) {
+                    $product = $saleItem->product ?? Product::withTrashed()->find($saleItem->product_id);
+                    if ($product && $product->track_stock) {
+                        $product->increment('stock_quantity', $retQty);
+                    }
                 }
             }
 
@@ -160,8 +176,11 @@ class ReturnController extends Controller
 
             // Revert restored stock
             foreach ($return->returnItems as $item) {
-                if ($item->product_id && $item->product?->track_stock) {
-                    $item->product->decrement('stock_quantity', min($item->product->stock_quantity, $item->quantity));
+                if ($item->product_id) {
+                    $product = $item->product ?? Product::withTrashed()->find($item->product_id);
+                    if ($product && $product->track_stock) {
+                        $product->decrement('stock_quantity', min($product->stock_quantity, $item->quantity));
+                    }
                 }
             }
 

@@ -76,7 +76,7 @@
                             <span class="fw-semibold">{{ $supplier->name }}</span>
                         </div>
                     </td>
-                    <td>{{ $supplier->company_name ?? '—' }}</td>
+                    <td>{{ $supplier->company ?? '—' }}</td>
                     <td><a href="mailto:{{ $supplier->email }}" class="text-decoration-none">{{ $supplier->email ?? '—' }}</a></td>
                     <td>{{ $supplier->phone ?? '—' }}</td>
                     <td>
@@ -95,18 +95,18 @@
                     </td>
                     <td class="text-center">
                         <div class="btn-group btn-group-sm">
-                            <a href="{{ route('suppliers.show', $supplier) }}" class="btn btn-outline-info" title="View">
+                            <a href="{{ route('suppliers.show', $supplier->id) }}" class="btn btn-outline-info" title="View">
                                 <i class="fas fa-eye"></i>
                             </a>
-                            <a href="{{ route('suppliers.edit', $supplier) }}" class="btn btn-outline-primary" title="Edit">
+                            <a href="{{ route('suppliers.edit', $supplier->id) }}" class="btn btn-outline-primary" title="Edit">
                                 <i class="fas fa-pencil"></i>
                             </a>
                             <button type="button" class="btn btn-outline-danger" title="Delete"
-                                    onclick="confirmDelete('delete-sup-{{ $supplier->id }}', '{{ $supplier->name }}')">
+                                    onclick="confirmDelete('delete-sup-{{ $supplier->id }}', '{{ addslashes($supplier->name) }}')">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
-                        <form id="delete-sup-{{ $supplier->id }}" action="{{ route('suppliers.destroy', $supplier) }}" method="POST" class="d-none">
+                        <form id="delete-sup-{{ $supplier->id }}" action="{{ route('suppliers.destroy', $supplier->id) }}" method="POST" class="d-none">
                             @csrf @method('DELETE')
                         </form>
                     </td>

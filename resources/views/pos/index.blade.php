@@ -234,21 +234,25 @@
 
         {{-- Payment --}}
         <div class="payment-section">
-            <div class="d-flex gap-2 mb-3">
-                <button class="payment-btn" :class="{ active: paymentMethod === 'cash' }"    @click="setPayment('cash')">
+            <div class="d-flex gap-1 mb-3">
+                <button class="payment-btn flex-fill" :class="{ active: paymentMethod === 'cash' }"    @click="setPayment('cash')">
                     <i class="fas fa-money-bill-wave"></i><span>Cash</span>
                 </button>
-                <button class="payment-btn" :class="{ active: paymentMethod === 'card' }"    @click="setPayment('card')">
+                <button class="payment-btn flex-fill" :class="{ active: paymentMethod === 'card' }"    @click="setPayment('card')">
                     <i class="fas fa-credit-card"></i><span>Card</span>
                 </button>
-                <button class="payment-btn" :class="{ active: paymentMethod === 'transfer' }"@click="setPayment('transfer')">
+                <button class="payment-btn flex-fill" :class="{ active: paymentMethod === 'transfer' }"@click="setPayment('transfer')">
                     <i class="fas fa-building-columns"></i><span>Transfer</span>
                 </button>
-                <button class="payment-btn" :class="{ active: paymentMethod === 'qris' }"   @click="setPayment('qris')">
+                <button class="payment-btn flex-fill" :class="{ active: paymentMethod === 'qris' }"   @click="setPayment('qris')">
                     <i class="fas fa-qrcode"></i><span>QRIS</span>
+                </button>
+                <button class="payment-btn flex-fill" :class="{ active: paymentMethod === 'split' }"  @click="setPayment('split')">
+                    <i class="fas fa-layer-group"></i><span>Split</span>
                 </button>
             </div>
 
+            {{-- Single Cash Tender --}}
             <div x-show="paymentMethod === 'cash'" class="mb-3">
                 <label class="form-label mb-1" style="font-size:.8rem;font-weight:600">Amount Tendered</label>
                 <div class="input-group">
@@ -256,6 +260,7 @@
                     <input type="number" class="form-control" x-model.number="amountTendered"
                            :min="total" step="1000" style="font-size:.9rem">
                 </div>
+                <div class="d-flex flex-wrap gap-1 mt-2">
                     <template x-for="amt in quickCashOptions()" :key="amt">
                         <button type="button" class="btn btn-sm btn-outline-secondary" @click="amountTendered = amt"
                                 style="font-size:.72rem;padding:3px 8px" x-text="'Rp ' + formatNum(amt)">
@@ -271,13 +276,49 @@
                 </div>
             </div>
 
+            {{-- Split Tender Allocation --}}
+            <div x-show="paymentMethod === 'split'" class="mb-3 p-2 border rounded bg-light">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0 fw-bold small"><i class="fas fa-coins me-1 text-primary"></i>Split Tenders</label>
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" @click="addSplitPayment()" style="font-size:.75rem">
+                        <i class="fas fa-plus me-1"></i>Add Tender
+                    </button>
+                </div>
+                <template x-for="(sp, idx) in splitPayments" :key="idx">
+                    <div class="row g-1 mb-2 align-items-center">
+                        <div class="col-5">
+                            <select class="form-select form-select-sm" x-model="sp.payment_method" style="font-size:.75rem">
+                                <option value="cash">Cash</option>
+                                <option value="card">Card</option>
+                                <option value="transfer">Transfer</option>
+                                <option value="qris">QRIS</option>
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <input type="number" class="form-control form-control-sm" x-model.number="sp.amount" placeholder="Amount" min="0" style="font-size:.75rem">
+                        </div>
+                        <div class="col-2 text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger p-1" @click="removeSplitPayment(idx)" :disabled="splitPayments.length <= 1" style="font-size:.65rem">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                <div class="d-flex justify-content-between small fw-bold pt-1 border-top">
+                    <span>Allocated / Total:</span>
+                    <span :class="splitTotal >= total ? 'text-success' : 'text-danger'">
+                        Rp <span x-text="formatNum(splitTotal)"></span> / Rp <span x-text="formatNum(total)"></span>
+                    </span>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <input type="text" class="form-control form-control-sm" x-model="notes" placeholder="Order notes (optional)" style="font-size:.82rem">
             </div>
 
             <div class="d-flex gap-2">
                 <button class="btn-process flex-fill" @click="processTransaction()"
-                        :disabled="cart.length === 0 || processing || (paymentMethod === 'cash' && amountTendered < total)">
+                        :disabled="cart.length === 0 || processing || (paymentMethod === 'cash' && amountTendered < total) || (paymentMethod === 'split' && splitTotal < total)">
                     <span x-show="!processing">
                         <i class="fas fa-check-circle me-1"></i>Process Sale
                     </span>
@@ -380,6 +421,10 @@ function posTerminal() {
         discountValue: 0,
         paymentMethod: 'cash',
         amountTendered: 0,
+        splitPayments: [
+            { payment_method: 'cash', amount: 0 },
+            { payment_method: 'qris', amount: 0 }
+        ],
         notes: '',
         processing: false,
         taxRate: {{ $taxRate }},
@@ -406,6 +451,9 @@ function posTerminal() {
         },
         get changeAmount() {
             return Math.max(0, this.amountTendered - this.total);
+        },
+        get splitTotal() {
+            return this.splitPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         },
 
         // Init
@@ -438,14 +486,49 @@ function posTerminal() {
             this.filterProducts();
         },
 
-        handleBarcodeScan() {
+        async handleBarcodeScan() {
             const q = this.searchQuery.trim();
             if (!q) return;
-            const match = this.allProducts.find(p => p.barcode === q || p.sku === q);
+            let match = this.allProducts.find(p => p.barcode === q || p.sku === q);
+            if (!match) {
+                try {
+                    const r = await fetch('{{ route("pos.search") }}?q=' + encodeURIComponent(q));
+                    const results = await r.json();
+                    match = results.find(p => p.barcode === q || p.sku === q) || (results.length > 0 ? results[0] : null);
+                    if (match && !this.allProducts.some(p => p.id === match.id)) {
+                        this.allProducts.push(match);
+                    }
+                } catch(e) { console.error('Product server lookup failed', e); }
+            }
             if (match) {
                 this.addToCart(match);
                 this.searchQuery = '';
-                this.filteredProducts = [...this.allProducts];
+                this.filterProducts();
+            } else {
+                Swal.fire({ icon: 'warning', title: 'Not Found', text: `Product with barcode or SKU "${q}" not found.`, timer: 2000, showConfirmButton: false });
+            }
+        },
+
+        setPayment(method) {
+            this.paymentMethod = method;
+            if (method === 'cash') {
+                this.amountTendered = this.total;
+            } else if (method === 'split') {
+                const half = Math.floor(this.total / 2);
+                this.splitPayments = [
+                    { payment_method: 'cash', amount: half },
+                    { payment_method: 'qris', amount: this.total - half }
+                ];
+            }
+        },
+
+        addSplitPayment() {
+            this.splitPayments.push({ payment_method: 'card', amount: 0 });
+        },
+
+        removeSplitPayment(idx) {
+            if (this.splitPayments.length > 1) {
+                this.splitPayments.splice(idx, 1);
             }
         },
 
@@ -577,6 +660,10 @@ function posTerminal() {
                 Swal.fire({ icon: 'warning', title: 'Insufficient Amount', text: 'Tendered amount must be ≥ total.' });
                 return;
             }
+            if (this.paymentMethod === 'split' && this.splitTotal < this.total) {
+                Swal.fire({ icon: 'warning', title: 'Incomplete Split Payment', text: `Allocated split total (Rp ${this.formatNum(this.splitTotal)}) must cover the order total (Rp ${this.formatNum(this.total)}).` });
+                return;
+            }
             this.processing = true;
             try {
                 const payload = {
@@ -586,11 +673,18 @@ function posTerminal() {
                     })),
                     customer_id:    this.customerId,
                     payment_method: this.paymentMethod,
-                    paid_amount:    this.paymentMethod === 'cash' ? this.amountTendered : this.total,
+                    paid_amount:    this.paymentMethod === 'cash' ? this.amountTendered : (this.paymentMethod === 'split' ? this.splitTotal : this.total),
                     discount_type:  this.discountType,
                     discount_value: this.discountValue,
                     notes:          this.notes,
                 };
+
+                if (this.paymentMethod === 'split') {
+                    payload.split_payments = this.splitPayments.map(sp => ({
+                        payment_method: sp.payment_method,
+                        amount: Number(sp.amount) || 0
+                    }));
+                }
 
                 const r = await fetch('{{ route("pos.transaction") }}', {
                     method: 'POST',

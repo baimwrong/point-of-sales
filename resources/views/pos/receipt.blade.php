@@ -182,6 +182,14 @@
             <td style="padding-top: 4px;">Metode Pembayaran</td>
             <td class="text-end" style="padding-top: 4px; text-transform: uppercase;"><strong>{{ $sale->payment_method }}</strong></td>
         </tr>
+        @if($sale->salePayments && $sale->salePayments->isNotEmpty())
+            @foreach($sale->salePayments as $payment)
+                <tr style="font-size: 11px; color: #555;">
+                    <td style="padding-left: 8px;">- {{ ucfirst($payment->payment_method) }}{{ $payment->reference ? ' (' . $payment->reference . ')' : '' }}</td>
+                    <td class="text-end">{{ $settings['currency_symbol'] ?? 'Rp' }} {{ number_format($payment->amount, 0, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        @endif
         <tr>
             <td>Bayar / Tunai</td>
             <td class="text-end">{{ $settings['currency_symbol'] ?? 'Rp' }} {{ number_format($sale->paid_amount, 0, ',', '.') }}</td>

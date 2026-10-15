@@ -20,7 +20,7 @@ class SaleReturn extends Model
         return ['total_refund' => 'decimal:2'];
     }
 
-    public function sale()        { return $this->belongsTo(Sale::class); }
-    public function user()        { return $this->belongsTo(User::class); }
+    public function sale()        { return $this->belongsTo(Sale::class)->withTrashed(); }
+    public function user()        { return $this->belongsTo(User::class)->withTrashed(); }
     public function returnItems() { return $this->hasMany(SaleReturnItem::class, 'sale_return_id'); }
 }

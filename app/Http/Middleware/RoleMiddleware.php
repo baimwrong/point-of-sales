@@ -44,12 +44,14 @@ class RoleMiddleware
                 ->with('error', 'Your account has been deactivated.');
         }
 
-        $userRole = $user->role?->name;
-        if (!$userRole || !in_array($userRole, $roles)) {
-            if ($request->expectsJson()) {
-                return response()->json(['message' => 'Unauthorized action.'], 403);
+        if (!empty($roles)) {
+            $userRole = $user->role?->name;
+            if (!$userRole || !in_array($userRole, $roles)) {
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => 'Unauthorized action.'], 403);
+                }
+                abort(403, 'Unauthorized action.');
             }
-            abort(403, 'Unauthorized action.');
         }
 
         return $next($request);

@@ -1021,6 +1021,28 @@
         const itemName = btn.getAttribute('data-item-name') || 'this item';
         confirmDelete(formId, itemName);
     });
+
+    /* =============================================
+       DOUBLE SUBMIT PREVENTION
+    ============================================= */
+    document.addEventListener('submit', function (e) {
+        const form = e.target;
+        if (form.dataset.submitting === 'true') {
+            e.preventDefault();
+            return false;
+        }
+        const method = (form.getAttribute('method') || 'GET').toUpperCase();
+        if (method !== 'GET') {
+            form.dataset.submitting = 'true';
+            const submitBtns = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+            submitBtns.forEach(btn => {
+                btn.disabled = true;
+                if (!btn.querySelector('.spinner-border')) {
+                    btn.insertAdjacentHTML('afterbegin', '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>');
+                }
+            });
+        }
+    });
 </script>
 
 @yield('scripts')

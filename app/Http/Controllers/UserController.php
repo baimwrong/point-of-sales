@@ -46,6 +46,32 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $data = $request->validated();
+
+        if ((int)$user->id === auth()->id()) {
+            if (isset($data['role_id']) && (int)$data['role_id'] !== (int)$user->role_id) {
+                return back()->with('error', 'You cannot change your own role.');
+            }
+            if (isset($data['is_active']) && !$data['is_active']) {
+                return back()->with('error', 'You cannot deactivate your own account.');
+            }
+        }
+
+        if ($user->isAdmin() && $user->is_active) {
+            $isDemoting = isset($data['role_id']) && (int)$data['role_id'] !== (int)$user->role_id;
+            $isDeactivating = isset($data['is_active']) && !$data['is_active'];
+
+            if ($isDemoting || $isDeactivating) {
+                $otherActiveAdmins = User::whereHas('role', fn($q) => $q->where('name', 'admin'))
+                    ->where('is_active', true)
+                    ->where('id', '!=', $user->id)
+                    ->count();
+
+                if ($otherActiveAdmins === 0) {
+                    return back()->with('error', 'Cannot demote or deactivate the last active administrator.');
+                }
+            }
+        }
+
         if (empty($data['password'])) unset($data['password']);
         $user->update($data);
         ActivityLog::log('update', "Updated user: {$user->name}", $user);
@@ -58,6 +84,18 @@ class UserController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
         $user = User::findOrFail($id);
+
+        if ($user->isAdmin() && $user->is_active) {
+            $otherActiveAdmins = User::whereHas('role', fn($q) => $q->where('name', 'admin'))
+                ->where('is_active', true)
+                ->where('id', '!=', $user->id)
+                ->count();
+
+            if ($otherActiveAdmins === 0) {
+                return back()->with('error', 'Cannot delete the last active administrator.');
+            }
+        }
+
         $name = $user->name;
         $user->delete();
         ActivityLog::log('delete', "Deleted user: {$name}");
@@ -70,6 +108,18 @@ class UserController extends Controller
             return back()->with('error', 'You cannot deactivate your own account.');
         }
         $user = User::findOrFail($id);
+
+        if ($user->is_active && $user->isAdmin()) {
+            $otherActiveAdmins = User::whereHas('role', fn($q) => $q->where('name', 'admin'))
+                ->where('is_active', true)
+                ->where('id', '!=', $user->id)
+                ->count();
+
+            if ($otherActiveAdmins === 0) {
+                return back()->with('error', 'Cannot deactivate the last active administrator.');
+            }
+        }
+
         $user->update(['is_active' => !$user->is_active]);
         $status = $user->is_active ? 'activated' : 'deactivated';
         ActivityLog::log('toggle_active', "User {$user->name} {$status}", $user);

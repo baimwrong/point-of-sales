@@ -186,7 +186,7 @@
                                 <i class="fas fa-pencil"></i>
                             </a>
                             <button type="button" class="btn btn-outline-danger" title="Delete"
-                                    onclick="confirmDelete('delete-product-{{ $product->id }}', '{{ $product->name }}')">
+                                    onclick="confirmDelete('delete-product-{{ $product->id }}', '{{ addslashes($product->name) }}')">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>

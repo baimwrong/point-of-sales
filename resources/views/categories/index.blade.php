@@ -106,15 +106,15 @@
                     </td>
                     <td class="text-center">
                         <div class="btn-group btn-group-sm">
-                            <a href="{{ route('categories.edit', $category) }}" class="btn btn-outline-primary" title="Edit">
+                            <a href="{{ route('categories.edit', $category->id) }}" class="btn btn-outline-primary" title="Edit">
                                 <i class="fas fa-pencil"></i>
                             </a>
                             <button type="button" class="btn btn-outline-danger" title="Delete"
-                                    onclick="confirmDelete('delete-cat-{{ $category->id }}', '{{ $category->name }}')">
+                                    onclick="confirmDelete('delete-cat-{{ $category->id }}', '{{ addslashes($category->name) }}')">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
-                        <form id="delete-cat-{{ $category->id }}" action="{{ route('categories.destroy', $category) }}" method="POST" class="d-none">
+                        <form id="delete-cat-{{ $category->id }}" action="{{ route('categories.destroy', $category->id) }}" method="POST" class="d-none">
                             @csrf @method('DELETE')
                         </form>
                     </td>

@@ -28,12 +28,17 @@ class PosController extends Controller
     public function searchProduct(Request $request)
     {
         $term = $request->get('q', '');
-        $products = Product::active()
+        $query = Product::active()
             ->search($term)
-            ->with(['category', 'unit'])
-            ->limit(30)
-            ->get()
-            ->map(fn($p) => $this->productPayload($p));
+            ->with(['category', 'unit']);
+
+        if (empty($term)) {
+            $query->limit(200);
+        } else {
+            $query->limit(50);
+        }
+
+        $products = $query->get()->map(fn($p) => $this->productPayload($p));
 
         return response()->json($products);
     }
@@ -47,12 +52,12 @@ class PosController extends Controller
     public function processTransaction(Request $request)
     {
         $request->validate([
-            'items'                   => ['required', 'array', 'min:1'],
-            'items.*.id'              => ['required', 'exists:products,id'],
-            'items.*.qty'             => ['required', 'integer', 'min:1'],
-            'items.*.price'           => ['nullable', 'numeric'],
-            'items.*.discount_type'   => ['nullable', 'in:none,fixed,percent'],
-            'items.*.discount_value'  => [
+            'items'                           => ['required', 'array', 'min:1'],
+            'items.*.id'                      => ['required', 'exists:products,id'],
+            'items.*.qty'                     => ['required', 'integer', 'min:1'],
+            'items.*.price'                   => ['nullable', 'numeric'],
+            'items.*.discount_type'           => ['nullable', 'in:none,fixed,percent'],
+            'items.*.discount_value'          => [
                 'nullable', 'numeric', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
                     $index = explode('.', $attribute)[1] ?? null;
@@ -64,11 +69,11 @@ class PosController extends Controller
                     }
                 },
             ],
-            'payment_method'          => ['required', 'in:cash,card,transfer,qris,split'],
-            'paid_amount'             => ['required', 'numeric', 'min:0'],
-            'customer_id'             => ['nullable', 'exists:customers,id'],
-            'discount_type'           => ['nullable', 'in:none,fixed,percent'],
-            'discount_value'          => [
+            'payment_method'                  => ['required', 'in:cash,card,transfer,qris,split'],
+            'paid_amount'                     => ['required', 'numeric', 'min:0'],
+            'customer_id'                     => ['nullable', 'exists:customers,id'],
+            'discount_type'                   => ['nullable', 'in:none,fixed,percent'],
+            'discount_value'                  => [
                 'nullable', 'numeric', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
                     if ($request->discount_type === 'percent' && $value > 100) {
@@ -76,10 +81,11 @@ class PosController extends Controller
                     }
                 },
             ],
-            'notes'                   => ['nullable', 'string', 'max:500'],
-            'split_payments'          => ['required_if:payment_method,split', 'array', 'min:1'],
-            'split_payments.*.method' => ['required', 'in:cash,card,transfer,qris'],
-            'split_payments.*.amount' => ['required', 'numeric', 'min:0'],
+            'notes'                           => ['nullable', 'string', 'max:500'],
+            'split_payments'                  => ['required_if:payment_method,split', 'array', 'min:1'],
+            'split_payments.*.method'         => ['required_without:split_payments.*.payment_method', 'in:cash,card,transfer,qris'],
+            'split_payments.*.payment_method' => ['required_without:split_payments.*.method', 'in:cash,card,transfer,qris'],
+            'split_payments.*.amount'         => ['required', 'numeric', 'min:0'],
         ]);
 
         try {
@@ -93,10 +99,10 @@ class PosController extends Controller
             $productIds = collect($items)->pluck('id')->unique()->toArray();
             $products   = Product::lockForUpdate()->whereIn('id', $productIds)->get()->keyBy('id');
 
-            // Validate stock & compute subtotal using server-side product pricing
-            $productMap = [];
-            foreach ($items as $item) {
-                $product = $products->get($item['id']);
+            // Validate total requested stock per product (preventing negative stock via duplicate item IDs)
+            $quantitiesByProduct = collect($items)->groupBy('id')->map(fn($g) => $g->sum('qty'));
+            foreach ($quantitiesByProduct as $productId => $totalRequestedQty) {
+                $product = $products->get($productId);
                 if (!$product) {
                     DB::rollBack();
                     return response()->json([
@@ -105,13 +111,19 @@ class PosController extends Controller
                     ], 422);
                 }
 
-                if ($product->track_stock && $product->stock_quantity < $item['qty']) {
+                if ($product->track_stock && $product->stock_quantity < $totalRequestedQty) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
                         'message' => "Insufficient stock for \"{$product->name}\". Available: {$product->stock_quantity}",
                     ], 422);
                 }
+            }
+
+            // Compute subtotal using server-side product pricing
+            $productMap = [];
+            foreach ($items as $item) {
+                $product = $products->get($item['id']);
 
                 // Determine base price and discount without double-compounding
                 $unitPrice       = (float) $product->selling_price;
@@ -232,17 +244,19 @@ class PosController extends Controller
             // Payment records (only record split entries OR single payment, never duplicate)
             if ($request->payment_method === 'split' && $request->has('split_payments')) {
                 foreach ($request->split_payments as $sp) {
+                    $method = $sp['payment_method'] ?? $sp['method'] ?? 'cash';
                     SalePayment::create([
                         'sale_id'        => $sale->id,
-                        'payment_method' => $sp['method'],
+                        'payment_method' => $method,
                         'amount'         => $sp['amount'],
+                        'reference'      => $sp['reference'] ?? null,
                     ]);
                 }
             } else {
                 SalePayment::create([
                     'sale_id'        => $sale->id,
                     'payment_method' => $request->payment_method,
-                    'amount'         => $paidAmount,
+                    'amount'         => $totalAmount,
                 ]);
             }
 

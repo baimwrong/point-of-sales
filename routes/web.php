@@ -44,7 +44,7 @@ Route::get('/', function () {
 | Authenticated Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'role'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -54,7 +54,7 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
     // POS Terminal
-    Route::prefix('pos')->name('pos.')->group(function () {
+    Route::prefix('pos')->name('pos.')->middleware('role:admin,manager,cashier')->group(function () {
         Route::get('/', [PosController::class, 'index'])->name('index');
         Route::get('/search', [PosController::class, 'searchProduct'])->name('search');
         Route::get('/product/{id}', [PosController::class, 'getProduct'])->name('product');

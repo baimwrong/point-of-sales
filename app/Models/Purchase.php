@@ -28,8 +28,8 @@ class Purchase extends Model
         ];
     }
 
-    public function supplier()      { return $this->belongsTo(Supplier::class); }
-    public function user()          { return $this->belongsTo(User::class); }
+    public function supplier()      { return $this->belongsTo(Supplier::class)->withTrashed(); }
+    public function user()          { return $this->belongsTo(User::class)->withTrashed(); }
     public function purchaseItems() { return $this->hasMany(PurchaseItem::class); }
 
     public function scopePending($q)  { return $q->where('status', 'pending'); }
