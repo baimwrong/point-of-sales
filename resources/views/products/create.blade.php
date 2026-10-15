@@ -18,8 +18,6 @@
     </a>
 </div>
 
-@include('components.alert')
-
 <form action="{{ route('products.store') }}" method="POST" enctype="multipart/form-data">
     @csrf
     <div class="row g-4">

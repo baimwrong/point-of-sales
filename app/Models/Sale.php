@@ -36,8 +36,11 @@ class Sale extends Model
     public function customer()    { return $this->belongsTo(Customer::class); }
     public function user()        { return $this->belongsTo(User::class); }
     public function saleItems()   { return $this->hasMany(SaleItem::class); }
+    public function items()       { return $this->saleItems(); }
     public function salePayments(){ return $this->hasMany(SalePayment::class); }
+    public function payments()    { return $this->salePayments(); }
     public function saleReturns() { return $this->hasMany(SaleReturn::class); }
+    public function returns()     { return $this->saleReturns(); }
 
     /* ------------------------------------------------------------------ */
     /* Scopes                                                              */
@@ -49,24 +52,34 @@ class Sale extends Model
 
     public function scopeToday($query)
     {
-        return $query->whereDate('created_at', today());
+        return $query->whereBetween('created_at', [
+            today()->startOfDay(),
+            today()->endOfDay(),
+        ]);
     }
 
     public function scopeByDate($query, string $date)
     {
-        return $query->whereDate('created_at', $date);
+        return $query->whereBetween('created_at', [
+            $date . ' 00:00:00',
+            $date . ' 23:59:59',
+        ]);
     }
 
     public function scopeThisMonth($query)
     {
-        return $query->whereYear('created_at', now()->year)
-                     ->whereMonth('created_at', now()->month);
+        return $query->whereBetween('created_at', [
+            now()->startOfMonth()->startOfDay(),
+            now()->endOfMonth()->endOfDay(),
+        ]);
     }
 
     public function scopeDateRange($query, string $from, string $to)
     {
-        return $query->whereDate('created_at', '>=', $from)
-                     ->whereDate('created_at', '<=', $to);
+        return $query->whereBetween('created_at', [
+            $from . ' 00:00:00',
+            $to . ' 23:59:59',
+        ]);
     }
 
     /* ------------------------------------------------------------------ */
@@ -78,7 +91,7 @@ class Sale extends Model
             'completed'      => '<span class="badge bg-success">Completed</span>',
             'refunded'       => '<span class="badge bg-danger">Refunded</span>',
             'partial_refund' => '<span class="badge bg-warning text-dark">Partial Refund</span>',
-            default          => '<span class="badge bg-secondary">Unknown</span>',
+            default          => '<span class="badge bg-secondary">' . e(ucfirst((string)$this->status)) . '</span>',
         };
     }
 
@@ -91,7 +104,7 @@ class Sale extends Model
             'qris'     => ['bg-purple', 'QRIS'],
             'split'    => ['bg-warning text-dark', 'Split'],
         ];
-        [$cls, $label] = $map[$this->payment_method] ?? ['bg-secondary', ucfirst($this->payment_method)];
-        return "<span class=\"badge {$cls}\">{$label}</span>";
+        [$cls, $label] = $map[$this->payment_method] ?? ['bg-secondary', ucfirst((string)$this->payment_method)];
+        return "<span class=\"badge {$cls}\">" . e($label) . "</span>";
     }
 }

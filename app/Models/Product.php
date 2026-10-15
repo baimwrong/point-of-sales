@@ -82,9 +82,9 @@ class Product extends Model
     public function scopeSearch($query, string $term)
     {
         return $query->where(function ($q) use ($term) {
-            $q->where('name', 'ilike', "%{$term}%")
-              ->orWhere('sku', 'ilike', "%{$term}%")
-              ->orWhere('barcode', 'ilike', "%{$term}%");
+            $q->where('name', 'LIKE', "%{$term}%")
+              ->orWhere('sku', 'LIKE', "%{$term}%")
+              ->orWhere('barcode', 'LIKE', "%{$term}%");
         });
     }
 
@@ -93,7 +93,7 @@ class Product extends Model
     /* ------------------------------------------------------------------ */
     public function getImageUrlAttribute(): string
     {
-        if ($this->image && file_exists(public_path('images/products/' . $this->image))) {
+        if ($this->image) {
             return asset('images/products/' . $this->image);
         }
         return asset('images/placeholder-product.png');

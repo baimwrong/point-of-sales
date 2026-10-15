@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Unit;
 use App\Models\ActivityLog;
 use App\Services\SpreadsheetService;
+use App\Helpers\PosHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -95,7 +96,7 @@ class ProductImportController extends Controller
     public function import(Request $request)
     {
         $request->validate([
-            'file' => ['required', 'file', 'max:10240'], // 10MB max
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'], // 10MB max
         ]);
 
         $file      = $request->file('file');
@@ -115,6 +116,26 @@ class ProductImportController extends Controller
         $importedCount = 0;
         $updatedCount  = 0;
         $errors        = [];
+
+        // Helper to parse localized/Indonesian prices cleanly
+        $parsePrice = function ($val): float {
+            if ($val === null || $val === '') return 0.0;
+            $clean = trim((string)$val);
+            $clean = preg_replace('/[^\d.,]/', '', $clean);
+            if ($clean === '') return 0.0;
+
+            if (str_contains($clean, ',') && str_contains($clean, '.')) {
+                $clean = str_replace('.', '', $clean);
+                $clean = str_replace(',', '.', $clean);
+            } elseif (str_contains($clean, ',')) {
+                $clean = str_replace(',', '.', $clean);
+            } elseif (substr_count($clean, '.') === 1 && strlen(substr(strrchr($clean, '.'), 1)) === 3) {
+                $clean = str_replace('.', '', $clean);
+            } elseif (substr_count($clean, '.') > 1) {
+                $clean = str_replace('.', '', $clean);
+            }
+            return (float) $clean;
+        };
 
         // Preload categories & units for fast lookup
         $categoriesMap = Category::all()->keyBy(fn($c) => strtolower(trim($c->name)));
@@ -138,9 +159,9 @@ class ProductImportController extends Controller
                 }
 
                 $barcode        = !empty($row['barcode']) ? trim($row['barcode']) : null;
-                $costPrice      = isset($row['cost_price']) ? (float) str_replace([',', '.'], ['', '.'], $row['cost_price']) : 0;
-                $sellingPrice   = isset($row['selling_price']) ? (float) str_replace([',', '.'], ['', '.'], $row['selling_price']) : 0;
-                $wholesalePrice = !empty($row['wholesale_price']) ? (float) str_replace([',', '.'], ['', '.'], $row['wholesale_price']) : null;
+                $costPrice      = isset($row['cost_price']) ? $parsePrice($row['cost_price']) : 0;
+                $sellingPrice   = isset($row['selling_price']) ? $parsePrice($row['selling_price']) : 0;
+                $wholesalePrice = !empty($row['wholesale_price']) ? $parsePrice($row['wholesale_price']) : null;
                 $stockQuantity  = isset($row['stock_quantity']) ? (int) $row['stock_quantity'] : 0;
                 $minStockAlert  = isset($row['min_stock_alert']) ? (int) $row['min_stock_alert'] : 5;
                 $description    = trim($row['description'] ?? '');
@@ -271,18 +292,18 @@ class ProductImportController extends Controller
 
             foreach ($products as $p) {
                 fputcsv($handle, [
-                    $p->name,
-                    $p->sku,
-                    $p->barcode,
-                    $p->category?->name ?? '',
-                    $p->unit?->abbreviation ?? 'pcs',
+                    PosHelper::sanitizeCsvValue($p->name),
+                    PosHelper::sanitizeCsvValue($p->sku),
+                    PosHelper::sanitizeCsvValue($p->barcode ?? ''),
+                    PosHelper::sanitizeCsvValue($p->category?->name ?? ''),
+                    PosHelper::sanitizeCsvValue($p->unit?->abbreviation ?? 'pcs'),
                     $p->cost_price,
                     $p->selling_price,
                     $p->wholesale_price,
                     $p->stock_quantity,
                     $p->min_stock_alert,
                     $p->is_active ? 1 : 0,
-                    $p->description,
+                    PosHelper::sanitizeCsvValue($p->description ?? ''),
                 ]);
             }
             fclose($handle);

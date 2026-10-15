@@ -18,8 +18,6 @@
     </a>
 </div>
 
-@include('components.alert')
-
 <form action="{{ route('purchases.store') }}" method="POST" id="purchaseForm">
     @csrf
     <div class="row g-4">

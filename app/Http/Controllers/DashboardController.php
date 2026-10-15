@@ -24,12 +24,20 @@ class DashboardController extends Controller
         $lowStockCount     = Product::lowStock()->count();
 
         // Sales chart — last 7 days
-        $chartData = [];
+        $chartData   = [];
         $chartLabels = [];
+        $startDate   = now()->subDays(6)->startOfDay();
+
+        $dailySales = Sale::completed()
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw("DATE(created_at) as sale_date, SUM(total_amount) as daily_total")
+            ->groupByRaw("DATE(created_at)")
+            ->pluck('daily_total', 'sale_date');
+
         for ($i = 6; $i >= 0; $i--) {
             $date = now()->subDays($i);
             $chartLabels[] = $date->format('d M');
-            $chartData[]   = (float) Sale::byDate($date->toDateString())->sum('total_amount');
+            $chartData[]   = (float) ($dailySales[$date->toDateString()] ?? 0);
         }
 
         // Top 5 selling products this month

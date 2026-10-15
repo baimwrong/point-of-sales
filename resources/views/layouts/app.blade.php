@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="{{ asset('vendor/select2/css/select2.min.css') }}">
 
     @yield('styles')
+    @stack('styles')
 
     <style>
         /* =============================================
@@ -987,9 +988,41 @@
             $('.select2').select2({ theme: 'classic', width: '100%' });
         }
     });
+
+    /* =============================================
+       GLOBAL DELETE CONFIRMATION
+    ============================================= */
+    function confirmDelete(formId, itemName) {
+        Swal.fire({
+            title: 'Are you sure?',
+            text: `Delete "${itemName}"? This action cannot be undone.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const form = document.getElementById(formId);
+                if (form) form.submit();
+            }
+        });
+    }
+
+    // Also support declarative [data-confirm-delete]
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('[data-confirm-delete]');
+        if (!btn) return;
+        e.preventDefault();
+        const formId = btn.getAttribute('data-form-id');
+        const itemName = btn.getAttribute('data-item-name') || 'this item';
+        confirmDelete(formId, itemName);
+    });
 </script>
 
 @yield('scripts')
+@stack('scripts')
 
 </body>
 </html>

@@ -32,7 +32,7 @@ class ProfileController extends Controller
         $user->phone = $data['phone'] ?? null;
 
         if (!empty($data['password'])) {
-            $user->password = Hash::make($data['password']);
+            $user->password = $data['password'];
         }
 
         $user->save();

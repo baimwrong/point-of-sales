@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Sale;
+use App\Models\Product;
+use App\Models\ActivityLog;
+use App\Helpers\PosHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SaleController extends Controller
 {
@@ -12,8 +16,8 @@ class SaleController extends Controller
         $query = Sale::with(['customer', 'user'])->latest();
 
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('invoice_number','ilike',"%$s%")
-                ->orWhereHas('customer', fn($c) => $c->where('name','ilike',"%$s%")));
+            $query->where(fn($q) => $q->where('invoice_number', 'like', "%$s%")
+                ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%$s%")));
         }
         if ($from = $request->get('date_from')) $query->whereDate('created_at', '>=', $from);
         if ($to   = $request->get('date_to'))   $query->whereDate('created_at', '<=', $to);
@@ -32,9 +36,21 @@ class SaleController extends Controller
 
     public function destroy($id)
     {
-        $sale = Sale::findOrFail($id);
+        $sale = Sale::with('saleItems.product')->findOrFail($id);
         $invoice = $sale->invoice_number;
-        $sale->delete();
+
+        DB::transaction(function () use ($sale) {
+            if ($sale->status !== 'refunded') {
+                foreach ($sale->saleItems as $item) {
+                    if ($item->product_id && $item->product?->track_stock) {
+                        Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+                    }
+                }
+            }
+            $sale->delete();
+        });
+
+        ActivityLog::log('delete', "Deleted sale: {$invoice}");
         return redirect()->route('sales.index')->with('success', "Sale {$invoice} deleted.");
     }
 
@@ -46,24 +62,24 @@ class SaleController extends Controller
             ->when($request->payment_method, fn($q, $v) => $q->where('payment_method', $v))
             ->latest();
 
-        $sales = $query->get();
-
         $filename = 'sales-export-' . now()->format('Ymd-His') . '.csv';
         $headers  = [
             'Content-Type'        => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
 
-        $callback = function () use ($sales) {
+        $callback = function () use ($query) {
             $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF");
             fputcsv($handle, ['Invoice', 'Date', 'Customer', 'Cashier', 'Payment', 'Subtotal', 'Discount', 'Tax', 'Total', 'Status']);
-            foreach ($sales as $sale) {
+
+            foreach ($query->cursor() as $sale) {
                 fputcsv($handle, [
-                    $sale->invoice_number,
+                    PosHelper::sanitizeCsvValue($sale->invoice_number),
                     $sale->created_at->format('d/m/Y H:i'),
-                    $sale->customer?->name ?? 'Walk-in',
-                    $sale->user?->name ?? '-',
-                    ucfirst($sale->payment_method),
+                    PosHelper::sanitizeCsvValue($sale->customer?->name ?? 'Walk-in'),
+                    PosHelper::sanitizeCsvValue($sale->user?->name ?? '-'),
+                    PosHelper::sanitizeCsvValue(ucfirst($sale->payment_method)),
                     $sale->subtotal,
                     $sale->discount_amount,
                     $sale->tax_amount,

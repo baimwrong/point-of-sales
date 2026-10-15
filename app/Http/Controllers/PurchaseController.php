@@ -17,8 +17,8 @@ class PurchaseController extends Controller
     {
         $query = Purchase::with(['supplier', 'user'])->latest();
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('reference_number','ilike',"%$s%")
-                ->orWhereHas('supplier', fn($sq) => $sq->where('name','ilike',"%$s%")));
+            $query->where(fn($q) => $q->where('reference_number', 'like', "%$s%")
+                ->orWhereHas('supplier', fn($sq) => $sq->where('name', 'like', "%$s%")));
         }
         if ($st = $request->get('status')) $query->where('status', $st);
         if ($from = $request->get('date_from')) $query->whereDate('created_at', '>=', $from);
@@ -123,12 +123,39 @@ class PurchaseController extends Controller
 
     public function update(Request $request, $id)
     {
-        $purchase = Purchase::findOrFail($id);
+        $purchase = Purchase::with('purchaseItems')->findOrFail($id);
         $request->validate([
             'notes'  => ['nullable', 'string'],
             'status' => ['required', 'in:pending,received,partial,cancelled'],
         ]);
-        $purchase->update(['notes' => $request->notes, 'status' => $request->status]);
+
+        $oldStatus = $purchase->status;
+        $newStatus = $request->status;
+
+        DB::transaction(function () use ($purchase, $request, $oldStatus, $newStatus) {
+            // If changing TO received (and wasn't received before)
+            if ($newStatus === 'received' && $oldStatus !== 'received') {
+                foreach ($purchase->purchaseItems as $item) {
+                    if ($item->product_id) {
+                        Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+                    }
+                }
+                $purchase->received_at = now();
+            }
+
+            // If changing FROM received to cancelled or pending
+            if ($oldStatus === 'received' && $newStatus !== 'received') {
+                foreach ($purchase->purchaseItems as $item) {
+                    if ($item->product_id) {
+                        Product::where('id', $item->product_id)->decrement('stock_quantity', $item->quantity);
+                    }
+                }
+                $purchase->received_at = null;
+            }
+
+            $purchase->update(['notes' => $request->notes, 'status' => $newStatus]);
+        });
+
         ActivityLog::log('update', "Updated purchase: {$purchase->reference_number}", $purchase);
         return redirect()->route('purchases.show', $purchase->id)->with('success', 'Purchase updated.');
     }
@@ -155,9 +182,20 @@ class PurchaseController extends Controller
 
     public function destroy($id)
     {
-        $purchase = Purchase::findOrFail($id);
+        $purchase = Purchase::with('purchaseItems')->findOrFail($id);
         $ref = $purchase->reference_number;
-        $purchase->delete();
+
+        DB::transaction(function () use ($purchase) {
+            if ($purchase->status === 'received') {
+                foreach ($purchase->purchaseItems as $item) {
+                    if ($item->product_id) {
+                        Product::where('id', $item->product_id)->decrement('stock_quantity', $item->quantity);
+                    }
+                }
+            }
+            $purchase->delete();
+        });
+
         ActivityLog::log('delete', "Deleted purchase: {$ref}");
         return redirect()->route('purchases.index')->with('success', "Purchase {$ref} deleted.");
     }

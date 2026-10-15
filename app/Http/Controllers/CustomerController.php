@@ -13,7 +13,7 @@ class CustomerController extends Controller
     {
         $query = Customer::latest();
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('name','ilike',"%$s%")->orWhere('email','ilike',"%$s%")->orWhere('phone','ilike',"%$s%"));
+            $query->where(fn($q) => $q->where('name', 'like', "%$s%")->orWhere('email', 'like', "%$s%")->orWhere('phone', 'like', "%$s%"));
         }
         $customers = $query->paginate(15)->withQueryString();
         return view('customers.index', compact('customers'));
@@ -63,7 +63,7 @@ class CustomerController extends Controller
     {
         $term = $request->get('q', '');
         $customers = Customer::active()
-            ->where(fn($q) => $q->where('name','ilike',"%$term%")->orWhere('phone','ilike',"%$term%")->orWhere('email','ilike',"%$term%"))
+            ->where(fn($q) => $q->where('name', 'like', "%$term%")->orWhere('phone', 'like', "%$term%")->orWhere('email', 'like', "%$term%"))
             ->limit(15)
             ->get(['id','name','email','phone','loyalty_points']);
         return response()->json($customers);

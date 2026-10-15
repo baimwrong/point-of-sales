@@ -14,8 +14,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 {{-- Quick Summary Stats --}}
 <div class="row g-3 mb-4">
     <div class="col-md-4">

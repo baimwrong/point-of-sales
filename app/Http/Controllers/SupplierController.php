@@ -13,7 +13,7 @@ class SupplierController extends Controller
     {
         $query = Supplier::latest();
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('name','ilike',"%$s%")->orWhere('email','ilike',"%$s%")->orWhere('phone','ilike',"%$s%"));
+            $query->where(fn($q) => $q->where('name', 'like', "%$s%")->orWhere('email', 'like', "%$s%")->orWhere('phone', 'like', "%$s%"));
         }
         $suppliers = $query->paginate(15)->withQueryString();
         return view('suppliers.index', compact('suppliers'));

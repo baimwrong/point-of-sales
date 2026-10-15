@@ -28,8 +28,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row g-4">
     {{-- Left: Items and Summary --}}
     <div class="col-lg-8">

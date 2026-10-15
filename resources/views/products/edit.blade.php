@@ -23,8 +23,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <form action="{{ route('products.update', $product->id) }}" method="POST" enctype="multipart/form-data">
     @csrf
     @method('PUT')

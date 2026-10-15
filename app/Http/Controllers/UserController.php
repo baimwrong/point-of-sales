@@ -15,7 +15,7 @@ class UserController extends Controller
     {
         $query = User::with('role')->latest();
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('name','ilike',"%$s%")->orWhere('email','ilike',"%$s%"));
+            $query->where(fn($q) => $q->where('name', 'like', "%$s%")->orWhere('email', 'like', "%$s%"));
         }
         $users = $query->paginate(15)->withQueryString();
         return view('users.index', compact('users'));

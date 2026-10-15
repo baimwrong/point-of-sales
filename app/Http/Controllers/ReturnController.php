@@ -17,8 +17,8 @@ class ReturnController extends Controller
     {
         $query = SaleReturn::with(['sale', 'user'])->latest();
         if ($s = $request->get('search')) {
-            $query->where(fn($q) => $q->where('return_number','ilike',"%$s%")
-                ->orWhereHas('sale', fn($sq) => $sq->where('invoice_number','ilike',"%$s%")));
+            $query->where(fn($q) => $q->where('return_number', 'like', "%$s%")
+                ->orWhereHas('sale', fn($sq) => $sq->where('invoice_number', 'like', "%$s%")));
         }
         $returns = $query->paginate(15)->withQueryString();
         return view('returns.index', compact('returns'));
@@ -61,11 +61,24 @@ class ReturnController extends Controller
                 'notes'         => $request->notes,
             ]);
 
+            $hasReturnItems = false;
             foreach ($request->items as $retItem) {
-                $saleItem  = $sale->saleItems->where('id', $retItem['sale_item_id'])->first();
+                $saleItem = $sale->saleItems->where('id', $retItem['sale_item_id'])->first();
                 if (!$saleItem) continue;
 
-                $retQty    = min((int)$retItem['quantity'], $saleItem->quantity);
+                $alreadyReturned = SaleReturnItem::where('sale_item_id', $saleItem->id)->sum('quantity');
+                $maxReturnable   = $saleItem->quantity - $alreadyReturned;
+
+                if ($maxReturnable <= 0) {
+                    continue;
+                }
+
+                $retQty = min((int)$retItem['quantity'], $maxReturnable);
+                if ($retQty <= 0) {
+                    continue;
+                }
+
+                $hasReturnItems = true;
                 $unitPrice = $saleItem->unit_price;
                 $lineTotal = $unitPrice * $retQty;
                 $totalRefund += $lineTotal;
@@ -86,10 +99,18 @@ class ReturnController extends Controller
                 }
             }
 
+            if (!$hasReturnItems) {
+                DB::rollBack();
+                return back()->with('error', 'No valid items to return. The selected items have already been fully returned.')->withInput();
+            }
+
             $saleReturn->update(['total_refund' => $totalRefund]);
 
-            // Update sale status
-            $sale->update(['status' => 'refunded']);
+            // Update sale status based on whether all items or some items are returned
+            $totalSaleQty     = $sale->saleItems->sum('quantity');
+            $totalReturnedQty = SaleReturnItem::whereIn('sale_item_id', $sale->saleItems->pluck('id'))->sum('quantity');
+            $saleStatus       = ($totalReturnedQty >= $totalSaleQty) ? 'refunded' : 'partial_refund';
+            $sale->update(['status' => $saleStatus]);
 
             ActivityLog::log('return', "Return {$returnNum} processed for sale {$sale->invoice_number}", $saleReturn);
             DB::commit();

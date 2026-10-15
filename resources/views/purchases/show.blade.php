@@ -31,8 +31,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row g-4 mb-4">
     {{-- Left: Items List --}}
     <div class="col-lg-8">

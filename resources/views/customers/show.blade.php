@@ -23,8 +23,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row g-4 mb-4">
     {{-- Left column: Customer Profile & Loyalty Card --}}
     <div class="col-lg-4">

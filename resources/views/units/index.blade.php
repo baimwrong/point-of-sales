@@ -17,8 +17,6 @@
     </a>
 </div>
 
-@include('components.alert')
-
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
         <h6 class="mb-0 fw-bold"><i class="fas fa-ruler me-2 text-primary"></i>All Units</h6>

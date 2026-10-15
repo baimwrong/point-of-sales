@@ -13,7 +13,7 @@ class CategoryController extends Controller
     {
         $query = Category::withCount('products')->with('parent');
         if ($search = $request->get('search')) {
-            $query->where('name', 'ilike', "%{$search}%");
+            $query->where('name', 'like', "%{$search}%");
         }
         $categories = $query->orderBy('sort_order')->orderBy('name')->paginate(20)->withQueryString();
         return view('categories.index', compact('categories'));

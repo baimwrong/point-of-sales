@@ -57,13 +57,4 @@ class SettingController extends Controller
         ActivityLog::log('settings', 'Updated receipt & numbering settings');
         return back()->with('success', 'Receipt settings updated.');
     }
-
-    public function update(Request $request)
-    {
-        foreach ($request->except('_token', '_method') as $key => $value) {
-            Setting::set($key, $value);
-        }
-        Setting::clearCache();
-        return back()->with('success', 'Settings updated.');
-    }
 }

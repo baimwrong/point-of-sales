@@ -32,11 +32,28 @@ class PosHelper
      */
     public static function generateInvoiceNumber(): string
     {
-        $prefix      = Setting::get('invoice_prefix', 'INV');
-        $date        = now()->format('Ymd');
-        $todayCount  = \App\Models\Sale::whereDate('created_at', today())->count();
+        $prefix = Setting::get('invoice_prefix', 'INV');
+        $date   = now()->format('Ymd');
+        $base   = $prefix . '-' . $date . '-';
 
-        return $prefix . '-' . $date . '-' . str_pad($todayCount + 1, 4, '0', STR_PAD_LEFT);
+        $lastNumber = \App\Models\Sale::withTrashed()
+            ->where('invoice_number', 'like', $base . '%')
+            ->orderByDesc('invoice_number')
+            ->value('invoice_number');
+
+        $next = 1;
+        if ($lastNumber && strlen($lastNumber) > strlen($base)) {
+            $lastSeq = (int) substr($lastNumber, strlen($base));
+            $next = $lastSeq + 1;
+        }
+
+        $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        while (\App\Models\Sale::withTrashed()->where('invoice_number', $candidate)->exists()) {
+            $next++;
+            $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        }
+
+        return $candidate;
     }
 
     /**
@@ -48,11 +65,28 @@ class PosHelper
      */
     public static function generatePurchaseNumber(): string
     {
-        $prefix      = Setting::get('purchase_prefix', 'PO');
-        $date        = now()->format('Ymd');
-        $todayCount  = \App\Models\Purchase::whereDate('created_at', today())->count();
+        $prefix = Setting::get('purchase_prefix', 'PO');
+        $date   = now()->format('Ymd');
+        $base   = $prefix . '-' . $date . '-';
 
-        return $prefix . '-' . $date . '-' . str_pad($todayCount + 1, 4, '0', STR_PAD_LEFT);
+        $lastNumber = \App\Models\Purchase::withTrashed()
+            ->where('reference_number', 'like', $base . '%')
+            ->orderByDesc('reference_number')
+            ->value('reference_number');
+
+        $next = 1;
+        if ($lastNumber && strlen($lastNumber) > strlen($base)) {
+            $lastSeq = (int) substr($lastNumber, strlen($base));
+            $next = $lastSeq + 1;
+        }
+
+        $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        while (\App\Models\Purchase::withTrashed()->where('reference_number', $candidate)->exists()) {
+            $next++;
+            $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        }
+
+        return $candidate;
     }
 
     /**
@@ -64,11 +98,28 @@ class PosHelper
      */
     public static function generateReturnNumber(): string
     {
-        $prefix      = Setting::get('return_prefix', 'RTN');
-        $date        = now()->format('Ymd');
-        $todayCount  = \App\Models\SaleReturn::whereDate('created_at', today())->count();
+        $prefix = Setting::get('return_prefix', 'RTN');
+        $date   = now()->format('Ymd');
+        $base   = $prefix . '-' . $date . '-';
 
-        return $prefix . '-' . $date . '-' . str_pad($todayCount + 1, 4, '0', STR_PAD_LEFT);
+        $lastNumber = \App\Models\SaleReturn::withTrashed()
+            ->where('return_number', 'like', $base . '%')
+            ->orderByDesc('return_number')
+            ->value('return_number');
+
+        $next = 1;
+        if ($lastNumber && strlen($lastNumber) > strlen($base)) {
+            $lastSeq = (int) substr($lastNumber, strlen($base));
+            $next = $lastSeq + 1;
+        }
+
+        $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        while (\App\Models\SaleReturn::withTrashed()->where('return_number', $candidate)->exists()) {
+            $next++;
+            $candidate = $base . str_pad($next, 4, '0', STR_PAD_LEFT);
+        }
+
+        return $candidate;
     }
 
     /**
@@ -139,5 +190,20 @@ class PosHelper
     public static function makeSlug(string $text): string
     {
         return \Illuminate\Support\Str::slug($text);
+    }
+
+    /**
+     * Sanitize a value for safe CSV export to prevent Formula Injection (CWE-1236).
+     *
+     * @param  mixed  $value
+     * @return string
+     */
+    public static function sanitizeCsvValue(mixed $value): string
+    {
+        $str = (string) $value;
+        if (strlen($str) > 0 && in_array($str[0], ['=', '+', '-', '@', "\t", "\r"])) {
+            return "'" . $str;
+        }
+        return $str;
     }
 }

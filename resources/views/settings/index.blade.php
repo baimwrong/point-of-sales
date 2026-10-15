@@ -14,8 +14,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row">
     <div class="col-lg-3 mb-4">
         {{-- Navigation Tabs --}}

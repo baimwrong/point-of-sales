@@ -139,7 +139,7 @@ class ProductController extends Controller
     public function updateStock(Request $request, $id)
     {
         $request->validate([
-            'quantity'   => ['required', 'integer'],
+            'quantity'   => ['required', 'integer', 'min:0'],
             'adjustment' => ['required', 'in:add,subtract,set'],
             'reason'     => ['nullable', 'string', 'max:255'],
         ]);
@@ -163,6 +163,20 @@ class ProductController extends Controller
         );
 
         return redirect()->back()->with('success', 'Stock updated successfully.');
+    }
+
+    public function toggleActive($id)
+    {
+        $product = Product::findOrFail($id);
+        $product->update(['is_active' => !$product->is_active]);
+        $status = $product->is_active ? 'activated' : 'deactivated';
+        ActivityLog::log('toggle_active', "Product {$product->name} {$status}", $product);
+
+        return response()->json([
+            'success'   => true,
+            'is_active' => $product->is_active,
+            'message'   => "Product \"{$product->name}\" {$status}.",
+        ]);
     }
 
     private function uploadImage($file): string

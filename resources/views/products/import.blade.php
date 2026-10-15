@@ -23,8 +23,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row g-4">
     {{-- Upload Form --}}
     <div class="col-lg-6">

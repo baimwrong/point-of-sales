@@ -23,8 +23,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row justify-content-center">
     <div class="col-lg-6">
         <div class="card shadow-sm border-0 mb-4">

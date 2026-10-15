@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Route;
 */
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-    Route::post('/login', [LoginController::class, 'login'])->name('login.submit');
+    Route::post('/login', [LoginController::class, 'login'])->name('login.submit')->middleware('throttle:5,1');
 });
 
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout')->middleware('auth');
@@ -77,7 +77,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/import', [ProductImportController::class, 'import'])->name('import.process')
             ->middleware('role:admin,manager');
         Route::get('/import/template', [ProductImportController::class, 'downloadTemplate'])->name('import.template');
-        Route::get('/export', [ProductImportController::class, 'export'])->name('export');
+        Route::get('/export', [ProductImportController::class, 'export'])->name('export')
+            ->middleware('role:admin,manager');
 
         Route::get('/{id}', [ProductController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [ProductController::class, 'edit'])->name('edit')
@@ -87,6 +88,8 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/{id}', [ProductController::class, 'destroy'])->name('destroy')
             ->middleware('role:admin,manager');
         Route::post('/{id}/stock', [ProductController::class, 'updateStock'])->name('updateStock')
+            ->middleware('role:admin,manager');
+        Route::post('/{id}/toggle', [ProductController::class, 'toggleActive'])->name('toggle')
             ->middleware('role:admin,manager');
     });
 
@@ -130,7 +133,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{id}', [CustomerController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [CustomerController::class, 'edit'])->name('edit');
         Route::put('/{id}', [CustomerController::class, 'update'])->name('update');
-        Route::delete('/{id}', [CustomerController::class, 'destroy'])->name('destroy');
+        Route::delete('/{id}', [CustomerController::class, 'destroy'])->name('destroy')
+            ->middleware('role:admin,manager');
     });
 
     // Sales
@@ -192,6 +196,5 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/store', [SettingController::class, 'updateStore'])->name('updateStore');
         Route::post('/tax', [SettingController::class, 'updateTax'])->name('updateTax');
         Route::post('/receipt', [SettingController::class, 'updateReceipt'])->name('updateReceipt');
-        Route::post('/update', [SettingController::class, 'update'])->name('update');
     });
 });

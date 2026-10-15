@@ -26,8 +26,6 @@
     </div>
 </div>
 
-@include('components.alert')
-
 <div class="row g-4">
     {{-- Left column: Image & Key stats --}}
     <div class="col-lg-4">

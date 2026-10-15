@@ -429,7 +429,7 @@ function posTerminal() {
         filterProducts() {
             const q = this.searchQuery.toLowerCase().trim();
             this.filteredProducts = this.allProducts.filter(p => {
-                const matchCat = this.activeCategory === 'all' || true; // Category filter done server-side
+                const matchCat = this.activeCategory === 'all' || p.category_id == this.activeCategory;
                 const matchQ   = !q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.barcode||'').includes(q);
                 return matchCat && matchQ;
             });
@@ -437,17 +437,7 @@ function posTerminal() {
 
         filterByCategory(catId) {
             this.activeCategory = catId;
-            if (catId === 'all') {
-                this.filteredProducts = this.searchQuery
-                    ? this.allProducts.filter(p => p.name.toLowerCase().includes(this.searchQuery.toLowerCase()))
-                    : [...this.allProducts];
-            } else {
-                this.filteredProducts = this.allProducts.filter(p => {
-                    const matchCat = p.category_id === catId;
-                    const matchQ   = !this.searchQuery || p.name.toLowerCase().includes(this.searchQuery.toLowerCase());
-                    return matchCat && matchQ;
-                });
-            }
+            this.filterProducts();
         },
 
         handleBarcodeScan() {

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 class Setting extends Model
 {
@@ -12,14 +13,17 @@ class Setting extends Model
 
     public static function get(string $key, $default = null)
     {
-        if (isset(static::$cache[$key])) {
-            return static::$cache[$key];
+        if (array_key_exists($key, static::$cache)) {
+            return static::$cache[$key] ?? $default;
         }
 
-        $setting = static::where('key', $key)->first();
-        $value = $setting ? $setting->value : $default;
+        $value = Cache::remember("setting:{$key}", now()->addHours(24), function () use ($key) {
+            $setting = static::where('key', $key)->first();
+            return $setting ? $setting->value : null;
+        });
+
         static::$cache[$key] = $value;
-        return $value;
+        return $value !== null ? $value : $default;
     }
 
     public static function set(string $key, $value): void
@@ -29,6 +33,7 @@ class Setting extends Model
             ['value' => $value]
         );
         static::$cache[$key] = $value;
+        Cache::forget("setting:{$key}");
     }
 
     public static function getGroup(string $group): array
@@ -38,6 +43,9 @@ class Setting extends Model
 
     public static function clearCache(): void
     {
+        foreach (array_keys(static::$cache) as $k) {
+            Cache::forget("setting:{$k}");
+        }
         static::$cache = [];
     }
 }

@@ -18,8 +18,6 @@
     </a>
 </div>
 
-@include('components.alert')
-
 {{-- Step 1: Select Sale if not provided --}}
 @if(!$sale)
     <div class="row justify-content-center">

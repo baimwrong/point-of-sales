@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Sale;
 use App\Models\Product;
 use App\Models\Setting;
+use App\Helpers\PosHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -103,25 +104,26 @@ class ReportController extends Controller
         $from = $request->get('date_from', now()->startOfMonth()->toDateString());
         $to   = $request->get('date_to',   now()->toDateString());
 
-        $sales = Sale::with(['customer', 'user', 'saleItems'])
+        $query = Sale::with(['customer', 'user', 'saleItems'])
             ->where('status', 'completed')
             ->dateRange($from, $to)
-            ->latest()
-            ->get();
+            ->latest();
 
         $filename = "report-{$from}-to-{$to}.csv";
         $headers  = ['Content-Type' => 'text/csv', 'Content-Disposition' => "attachment; filename=\"{$filename}\""];
 
-        $callback = function () use ($sales) {
+        $callback = function () use ($query) {
             $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF");
             fputcsv($handle, ['Invoice','Date','Customer','Cashier','Payment','Items','Subtotal','Discount','Tax','Total']);
-            foreach ($sales as $sale) {
+
+            foreach ($query->cursor() as $sale) {
                 fputcsv($handle, [
-                    $sale->invoice_number,
+                    PosHelper::sanitizeCsvValue($sale->invoice_number),
                     $sale->created_at->format('d/m/Y H:i'),
-                    $sale->customer?->name ?? 'Walk-in',
-                    $sale->user?->name ?? '-',
-                    ucfirst($sale->payment_method),
+                    PosHelper::sanitizeCsvValue($sale->customer?->name ?? 'Walk-in'),
+                    PosHelper::sanitizeCsvValue($sale->user?->name ?? '-'),
+                    PosHelper::sanitizeCsvValue(ucfirst($sale->payment_method)),
                     $sale->saleItems->count(),
                     $sale->subtotal,
                     $sale->discount_amount,
